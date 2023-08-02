@@ -19,6 +19,7 @@ packages=(
 	cryptsetup
 	dosfstools
 	lvm2
+	sshfs
 	xfsprogs
 
 	# Security
@@ -28,9 +29,11 @@ packages=(
 	# Utilities
 	android-tools
 	bash-completion
+	bc
 	fd
 	git
 	htop
+	jq
 	man-db
 	neovim
 	ripgrep
@@ -38,6 +41,7 @@ packages=(
 	sd
 	tmux
 	usbutils
+	yq
 
 	# Containers
 	podman
