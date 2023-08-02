@@ -1,4 +1,4 @@
-# Arch Linux bootc container builder
+# Arch Linux ostree builder
 
 These scripts create a bootable archlinux ostree "tree". You can enjoy the same
 features as distributions like Fedora Silverblue or Kinoite. Namely: readonly
