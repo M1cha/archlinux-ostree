@@ -96,6 +96,7 @@ packages=(
 	alacritty
 	flatpak
 	meld
+	mpv
 	swaylock
 	swayidle
 	waybar
