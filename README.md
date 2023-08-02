@@ -14,13 +14,13 @@ why. It also allows me to quickly recreate the same setup on a different device.
 Additionally, I like the readonly nature since my system tends to get filled
 with untracked files when I'm not using ostree.
 
-I though about using NixOS. Conceptionally, it looks really good but I want to
+I thought about using NixOS. Conceptionally, it looks really good but I want to
 keep using arch and the AUR for now. I might consider switching in future.
 
 ## First deployment
 
 Install an ostree based distro, so you don't have to setup partition tables and
-bootloader yourself. I choose Fedora Kinoite because it uses btrfs and has an
+bootloaders yourself. I choose Fedora Kinoite because it uses btrfs and has an
 installer that allows setting up full disk encryption.
 
 If you want, you can delete the fedora OS from the ostree repo after the
