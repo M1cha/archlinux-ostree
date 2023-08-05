@@ -44,6 +44,9 @@ podman run --rm --init -it \
     -v "$gitdir:$gitdir:ro" \
     -v "$outdir:$outdir:idmap" \
     -v "$pkgcache:/var/cache/pacman/pkg:idmap" \
+    -v "/etc/ssh/ssh_host_ed25519_key:/etc/ssh/ssh_host_ed25519_key:ro,idmap" \
+    -v "/etc/ssh/ssh_host_ed25519_key.pub:/etc/ssh/ssh_host_ed25519_key.pub:ro,idmap" \
+    -v "/root/.ssh/authorized_keys:/root/.ssh/authorized_keys:ro,idmap" \
     -w "$gitdir" \
     -e "OUTDIR=$outdir" \
     -e "ARCH_ROOTFS=$rootfs" \

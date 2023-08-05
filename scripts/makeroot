@@ -117,12 +117,16 @@ packages=(
 
 	# file sharing
 	samba
+
+	# remote unlock
+	tinyssh
 )
 patched_packages=(
 	hyprland
 	xorg-xwayland
 )
 aur_packages=(
+	mkinitcpio-systemd-extras
 	xwaylandvideobridge-cursor-mode-2-git
 )
 
@@ -151,6 +155,15 @@ pre_pacstrap_config() {
 	cp "$PWD/files/mkinitcpio.conf" "$rootfs/etc/mkinitcpio.conf.d/ostree.conf"
 
 	cp "$PWD/files/vconsole.conf" "$rootfs/etc/"
+
+	mkdir -p "$rootfs/etc/systemd/network-initramfs"
+	cp "$PWD/files/20-wired.network" "$rootfs/etc/systemd/network-initramfs/"
+
+	mkdir -p "$rootfs/etc/ssh"
+	cp "/etc/ssh/ssh_host_ed25519_key"* "$rootfs/etc/ssh/"
+
+	mkdir -p "$rootfs/root/.ssh"
+	cp "/root/.ssh/authorized_keys" "$rootfs/root/.ssh/authorized_keys"
 }
 
 install_dvorak_m1cha() {
