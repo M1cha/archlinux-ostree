@@ -89,6 +89,6 @@ passwd m1cha
 ## Update
 
 ```bash
-$ ./update
+# ./update
 # ostree admin deploy --os=archlinux archlinux/latest
 ```
