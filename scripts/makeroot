@@ -255,6 +255,9 @@ move_to_var() {
 	mv "$rootfs/root" "$rootfs/var/roothome"
 	ln -s var/roothome "$rootfs/root"
 
+	rm -r "$rootfs/usr/local"
+	ln -s ../var/usrlocal "$rootfs/usr/local"
+
 	mv "$rootfs/srv" "$rootfs/var/srv"
 	ln -s var/srv "$rootfs/srv"
 
