@@ -1,0 +1,102 @@
+! Programmer Dvorak keymap
+!
+!   Original from: http://www.kaufmann.no/roland/dvorak/
+!   This file edited by: Merlin Dou (11 March 2014)
+!
+! This file is free software; you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation; either version 2 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program; if not, write to the Free Software
+! Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+!
+keymaps 0-2,4-6,8-9,12
+alt_is_meta
+include "linux-with-two-alt-keys.inc"
+strings as usual
+! --------------------------------------------------------------------------
+! Row 1
+! --------------------------------------------------------------------------
+keycode  13 = ampersand      percent
+keycode   2 = plus           one
+keycode   3 = bracketleft    two
+keycode   4 = braceleft      three
+keycode   5 = parenleft      four
+keycode   6 = equal          five
+keycode   7 = asterisk       six
+keycode   8 = parenright     seven
+keycode   9 = braceright     eight
+keycode  10 = bracketright   nine
+keycode  11 = exclam         zero
+keycode  12 = numbersign     grave
+! --------------------------------------------------------------------------
+! Row 2
+! --------------------------------------------------------------------------
+keycode  15 = Tab
+keycode  16 = semicolon      colon
+keycode  17 = comma          less
+keycode  18 = period         greater
+keycode  19 = p
+keycode  20 = y
+keycode  21 = f
+keycode  22 = g
+keycode  23 = c
+keycode  24 = r
+keycode  25 = l
+keycode  43 = backslash      bar
+! --------------------------------------------------------------------------
+! Row 3
+! --------------------------------------------------------------------------
+keycode   1 = Escape
+keycode  30 = a
+keycode  31 = o
+keycode  32 = e
+keycode  33 = u
+keycode  34 = i
+keycode  35 = d
+keycode  36 = h
+keycode  37 = t
+keycode  38 = n
+keycode  39 = s
+keycode  40 = minus          underscore
+! --------------------------------------------------------------------------
+! Row 4
+! --------------------------------------------------------------------------
+keycode  42 = Shift
+keycode  44 = apostrophe     quotedbl
+keycode  45 = q
+keycode  46 = j
+keycode  47 = k
+keycode  48 = x
+keycode  49 = b
+keycode  50 = m
+keycode  51 = w
+keycode  52 = v
+keycode  53 = z
+keycode  54 = Shift
+! --------------------------------------------------------------------------
+! Row 5
+! --------------------------------------------------------------------------
+keycode  41 = dollar         asciitilde
+keycode  58 = Caps_Lock
+keycode  26 = slash          question
+keycode  27 = at             asciicircum
+! --------------------------------------------------------------------------
+! Left thumb
+! --------------------------------------------------------------------------
+keycode  29 = Control
+keycode  56 = Alt
+keycode  14 = Delete
+! --------------------------------------------------------------------------
+! Right thumb
+! --------------------------------------------------------------------------
+keycode  57 = space
+keycode  28 = Return
+keycode  97 = Control

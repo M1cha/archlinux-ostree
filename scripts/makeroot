@@ -154,6 +154,8 @@ pre_pacstrap_config() {
 	mkdir -p "$rootfs/etc/mkinitcpio.conf.d"
 	cp "$PWD/files/mkinitcpio.conf" "$rootfs/etc/mkinitcpio.conf.d/ostree.conf"
 
+	mkdir -p "$rootfs/usr/share/kbd/keymaps/i386/dvorak"
+	cp "$PWD/files/dvorak-m1cha.map" "$rootfs/usr/share/kbd/keymaps/i386/dvorak/"
 	cp "$PWD/files/vconsole.conf" "$rootfs/etc/"
 
 	mkdir -p "$rootfs/etc/systemd/network-initramfs"
