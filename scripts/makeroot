@@ -194,6 +194,10 @@ EOF
 	set -e
 
 	sd -s "$needle" "${needle}${replacement}" "$rootfs/usr/share/X11/xkb/rules/evdev.xml"
+
+	cat "$PWD/files/xkb-symbols-us" >> "$rootfs/usr/share/X11/xkb/symbols/us"
+
+	cp "$PWD/files/sddm-Xsetup" "$rootfs/usr/share/sddm/scripts/Xsetup"
 }
 
 post_install_steps() {

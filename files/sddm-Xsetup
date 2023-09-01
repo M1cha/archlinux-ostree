@@ -1,0 +1,3 @@
+#!/bin/sh
+
+setxkbmap -layout us -variant dvp-m1cha
