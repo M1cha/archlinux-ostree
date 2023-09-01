@@ -71,6 +71,7 @@ packages=(
 	dunst
 	grim
 	hyprland
+	kdeconnect
 	polkit-kde-agent
 	qt5-wayland
 	sddm
