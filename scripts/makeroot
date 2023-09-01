@@ -122,8 +122,6 @@ packages=(
 	tinyssh
 )
 patched_packages=(
-	hyprland
-	xorg-xwayland
 )
 aur_packages=(
 	mkinitcpio-systemd-extras
@@ -225,7 +223,6 @@ post_install_steps() {
 		systemctl enable sddm.service; \
 		systemctl enable smb.service; \
 		systemctl enable sshd.service; \
-		pacman --noconfirm -U /var/cache/pkgcache-patched/*; \
 		pacman --noconfirm -U /var/cache/aur-packages/*; \
 		"
 }
