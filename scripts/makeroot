@@ -110,6 +110,7 @@ packages=(
 	# Bluetooth
 	bluez
 	bluez-utils
+	blueberry
 
 	# OBS webcam
 	v4l2loopback-dkms
