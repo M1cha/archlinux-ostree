@@ -160,8 +160,6 @@ pre_pacstrap_config() {
 	mkdir -p "$rootfs/etc/mkinitcpio.conf.d"
 	cp "$PWD/files/mkinitcpio.conf" "$rootfs/etc/mkinitcpio.conf.d/ostree.conf"
 
-	mkdir -p "$rootfs/usr/share/kbd/keymaps/i386/dvorak"
-	cp "$PWD/files/dvorak-m1cha.map" "$rootfs/usr/share/kbd/keymaps/i386/dvorak/"
 	cp "$PWD/files/vconsole.conf" "$rootfs/etc/"
 
 	mkdir -p "$rootfs/etc/systemd/network-initramfs"
@@ -174,34 +172,6 @@ pre_pacstrap_config() {
 	cp "/root/.ssh/authorized_keys" "$rootfs/root/.ssh/authorized_keys"
 }
 
-install_dvorak_m1cha() {
-	set +e
-	read -rd '' needle <<'EOF'
-        <variant>
-          <configItem>
-            <name>dvp</name>
-            <description>English (programmer Dvorak)</description>
-          </configItem>
-        </variant>
-EOF
-
-	read -rd '' replacement <<'EOF'
-        <variant>
-          <configItem>
-            <name>dvp-m1cha</name>
-            <description>English (programmer Dvorak - m1cha)</description>
-          </configItem>
-        </variant>
-EOF
-	set -e
-
-	sd -s "$needle" "${needle}${replacement}" "$rootfs/usr/share/X11/xkb/rules/evdev.xml"
-
-	cat "$PWD/files/xkb-symbols-us" >> "$rootfs/usr/share/X11/xkb/symbols/us"
-
-	cp "$PWD/files/sddm-Xsetup" "$rootfs/usr/share/sddm/scripts/Xsetup"
-}
-
 post_install_steps() {
 	ln -sf /usr/share/zoneinfo/Europe/Berlin "$rootfs/etc/localtime"
 	sed -i 's/^#\(en_US.UTF-8 UTF-8\)/\1/' "$rootfs/etc/locale.gen"
@@ -211,8 +181,6 @@ post_install_steps() {
 	echo "PasswordAuthentication no" >> "$rootfs/etc/ssh/sshd_config"
 
 	cp "$PWD/files/modules-load.conf" "$rootfs/etc/modules-load.d/ostree.conf"
-
-	install_dvorak_m1cha
 
 	# /usr/lib/sddm/sddm.conf.d would make more sense conceptionally, but
 	# for some reason sddm doesn't load configs from readonly mounts.
