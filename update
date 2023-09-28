@@ -41,6 +41,7 @@ podman run --rm --init -it \
     --net host \
     --security-opt label=disable \
     --cap-add all \
+    --pids-limit 4096 \
     -v "$gitdir:$gitdir:ro" \
     -v "$outdir:$outdir:idmap" \
     -v "$pkgcache:/var/cache/pacman/pkg:idmap" \
