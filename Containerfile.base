@@ -1,0 +1,6 @@
+FROM localhost/archlinux-pacstrap AS pacstrap
+
+RUN pacstrap -c -G -M /mnt base
+
+FROM scratch
+COPY --from=pacstrap /mnt /

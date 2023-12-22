@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+rootfs="/mnt"
+
+move_from_var() {
+	# This database must not be deleted, so we can modify it temporarily
+	# after running `ostree admin unlock`.
+	sed -i \
+		-e 's|^#\(DBPath\s*=\s*\).*|\1/usr/lib/pacman|g' \
+		-e 's|^#\(IgnoreGroup\s*=\s*\).*|\1modified|g' \
+		"$rootfs/etc/pacman.conf"
+	mv "$rootfs/var/lib/pacman" "$rootfs/usr/lib/"
+}
+
+move_to_var() {
+	mv "$rootfs/home" "$rootfs/var/"
+	ln -s var/home "$rootfs/home"
+
+	mv "$rootfs/mnt" "$rootfs/var/"
+	ln -s var/mnt "$rootfs/mnt"
+
+	# This is recommended by ostree but I don't see a good reason for it.
+	# rmdir "$rootfs/var/opt"
+	# mv "$rootfs/opt" "$rootfs/var/"
+	# ln -s var/opt "$rootfs/opt"
+
+	mv "$rootfs/root" "$rootfs/var/roothome"
+	ln -s var/roothome "$rootfs/root"
+
+	rm -r "${rootfs:?}/usr/local"
+	ln -s ../var/usrlocal "$rootfs/usr/local"
+
+	mv "$rootfs/srv" "$rootfs/var/srv"
+	ln -s var/srv "$rootfs/srv"
+
+	cp "/opt/ostree-0-integration.conf" "$rootfs/usr/lib/tmpfiles.d/"
+}
+
+clean_rootfs() {
+	# They'll be unused.
+	rm -r "${rootfs:?}/var/"*
+
+	# pacman leaves behind sockets which are not supported by ostree.
+	find "$rootfs" -type s -exec rm {} \;
+}
+
+ostreeify() {
+	# Those are required so the ostree tools can use them.
+	mkdir "$rootfs/sysroot"
+	ln -s sysroot/ostree "$rootfs/ostree"
+
+	# etc is handled by ostree and expected to be in /usr.
+	mv "$rootfs/etc" "$rootfs/usr/"
+
+	# ostree expects the initramfs in a different path.
+	# Also, we need to prepend microcode updates.
+	moduledir=$(find "$rootfs/usr/lib/modules" -mindepth 1 -maxdepth 1 -type d)
+	cat \
+		"$rootfs"/boot/*-ucode.img \
+		"$rootfs/boot/initramfs-linux-zen.img" \
+		> "$moduledir/initramfs.img"
+}
+
+lower_fstype="$(stat -f -c '%T' /mnt-lower)"
+if [ "$lower_fstype" = "overlayfs" ]; then
+	echo "overlay detected, use rsync." >&2
+	rsync -a /mnt-lower/ /mnt
+else
+	# Create a temporary overlay FS so none of our rootfs changes are permanent.
+	mkdir /overlay/{upper,work}
+	mount \
+		-t overlay \
+		-o 'lowerdir=/mnt-lower,upperdir=/overlay/upper,workdir=/overlay/work' \
+		overlay /mnt
+fi
+
+move_from_var
+move_to_var
+clean_rootfs
+ostreeify
+
+ostree commit --repo /sysroot/ostree/repo --tree=dir=/mnt "$@"
