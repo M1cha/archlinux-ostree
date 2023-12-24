@@ -231,7 +231,13 @@ case "$command" in
 	;;
 	'deploy')
 		podman run \
+			--privileged \
+			--security-opt apparmor=unconfined \
+			--security-opt seccomp=unconfined \
+			--security-opt label=disable \
+			--security-opt unmask=ALL \
 			--rm -it \
+			-v "/sys:/sys:rbind" \
 			-v "$boot_dir:/boot" \
 			-v "$sysroot_dir:/sysroot" \
 			"localhost/$pacstrap_tag" \
