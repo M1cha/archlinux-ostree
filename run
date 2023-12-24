@@ -33,6 +33,7 @@ usage: ${0##*/} [options] [command] [arg...]
   \$PWD: $PWD
 
   Options:
+    --boot-dir <path>              Path to the mounted boot directory.
     --podman-build-cache <bool>    Enable/Disable podman build cache. Boolean.
                                    Default: no.
     --pacman-cache <path>          Path to a persistent pacman package cache.
@@ -85,7 +86,7 @@ usage: ${0##*/} [options] [command] [arg...]
 EOF
 }
 
-long_opts='podman-build-cache:,pacman-cache:,pacstrap-tag:,rootfs-tag:,rootfs-containerfile:,rootfs-dir:,ostree-repo:,help'
+long_opts='boot-dir:,podman-build-cache:,pacman-cache:,pacstrap-tag:,rootfs-tag:,rootfs-containerfile:,rootfs-dir:,ostree-repo:,sysroot-dir:,help'
 if ! temp=$(getopt -o '' --long "$long_opts" -- "$@"); then
 	die "Invalid arguments"
 fi
@@ -93,12 +94,14 @@ fi
 eval set -- "$temp"
 while true; do
 	case "$1" in
+		'--boot-dir'|\
 		'--pacman-cache'|\
 		'--pacstrap-tag'|\
 		'--rootfs-tag'|\
 		'--rootfs-container'|\
 		'--rootfs-dir'|\
-		'--ostree-repo')
+		'--ostree-repo'|\
+		'--sysroot-dir')
 			name="$(arg_to_varname "$1")"
 			printf -v "$name" "%s" "$2"
 			shift 2
@@ -147,7 +150,7 @@ pacman_cache_args=()
 if [ ! -z ${pacman_cache+x} ]; then
 	mkdir -p "$pacman_cache"
 	pacman_cache_args=(
-		-v "$pacman_cache:/var/cache/pacman/pkg"
+		-v "$(realpath "$pacman_cache"):/var/cache/pacman/pkg"
 	)
 fi
 
@@ -226,7 +229,15 @@ case "$command" in
 			"localhost/$pacstrap_tag" \
 			/opt/commit_rootfs "$@"
 	;;
-
+	'deploy')
+		podman run \
+			--rm -it \
+			-v "$boot_dir:/boot" \
+			-v "$sysroot_dir:/sysroot" \
+			"localhost/$pacstrap_tag" \
+			/bin/bash
+			# ostree admin deploy "$@"
+	;;
 	*)
 		die "Unsupported command: ${command}"
 	;;
