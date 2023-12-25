@@ -224,6 +224,7 @@ case "$command" in
 		fi
 
 		podman run \
+			--pids-limit 4096 \
 			--cap-add sys_admin \
 			--cap-add mknod \
 			--security-opt apparmor=unconfined \
@@ -245,7 +246,7 @@ case "$command" in
 			--security-opt apparmor=unconfined \
 			--mount "type=bind,src=$rootfs_dir,dst=/mnt-lower,ro" \
 			--mount "type=bind,src=$ostree_repo,dst=/sysroot/ostree/repo" \
-			-v "$PWD:/opt:ro" \
+			-v "$gitdir:/opt:ro" \
 			--tmpfs /overlay \
 			--rm -it \
 			"localhost/$pacstrap_tag" \

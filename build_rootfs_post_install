@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -euo pipefail
+
+have_function() {
+	declare -f "$1" >/dev/null
+}
+
+source /tmp/script
+
+if have_function post_install_early; then
+	post_install_early
+fi
+
+if [ -d /tmp/aur ]; then
+	pacman --noconfirm -U /tmp/aur/*;
+fi
+
+if have_function post_install; then
+	post_install
+fi

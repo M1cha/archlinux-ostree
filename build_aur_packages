@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -euo pipefail
+
+build_aur_package() {
+	local name="$1"
+	local url="https://aur.archlinux.org/$name.git"
+	local dir="/home/builder/pkg"
+
+	git clone "$url" "$dir"
+	chown -R builder:builder "$dir"
+
+	pushd "$dir"
+	sudo -u builder makepkg -s --noconfirm
+	cp *.pkg.tar.zst /tmp/aur/
+	popd
+
+	rm -rf "$dir"
+}
+
+pacman --noconfirm -Syu base-devel git sudo
+
+useradd -m builder
+echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
+
+for package in "$@"; do
+	build_aur_package "$package"
+done
