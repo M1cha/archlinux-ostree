@@ -14,9 +14,9 @@ podman_build_cache=false
 
 # shellcheck disable=SC2059 # $1 and $2 can contain the printf modifiers
 out() { printf "$1 $2\n" "${@:3}"; }
-error() { out "==> ERROR:" "$@"; } >&2
-warning() { out "==> WARNING:" "$@"; } >&2
-msg() { out "==>" "$@"; }
+error() { out "====> ERROR:" "$@"; } >&2
+warning() { out "====> WARNING:" "$@"; } >&2
+msg() { out "====>" "$@"; }
 die() { error "$@"; exit 1; }
 
 arg_to_varname() {
@@ -160,6 +160,28 @@ if [ "$podman_build_cache" = false ]; then
 fi
 
 case "$command" in
+	'prepare_live_env')
+		msg "Install required packages"
+		pacman \
+			--needed \
+			--noconfirm \
+			-Sy \
+			fuse-overlayfs \
+			git \
+			ostree \
+			podman
+
+		msg "Patch storage.conf"
+		sed -i \
+		    -e 's|^\(graphroot\s*=\s*\).*|\1"/mnt/setup/container-storage"|g' \
+		    /etc/containers/storage.conf
+
+		msg "Patch containers.conf"
+		sed -i \
+		    -e 's|^# \(image_copy_tmp_dir\s*=\s*\).*|\1"/mnt/setup/container-tmp"|g' \
+		    /etc/containers/containers.conf
+		mkdir -p "/mnt/setup/container-tmp"
+	;;
 	'build_pacstrap_container')
 		podman build \
 			"${podman_build_cache_args[@]}" \
@@ -238,12 +260,15 @@ case "$command" in
 			--security-opt unmask=ALL \
 			--rm -it \
 			-v "/sys:/sys:rbind" \
-			-v "$boot_dir:/boot" \
-			-v "$sysroot_dir:/sysroot" \
+			-v "$boot_dir:/boot:rbind" \
+			-v "$sysroot_dir:/sysroot:rbind" \
 			"localhost/$pacstrap_tag" \
 			/bin/bash
 			# ostree admin deploy "$@"
 	;;
+        'deploy2')
+		unshare -m "$gitdir/initial_deployment_env" "$rootfs_dir" "$boot_dir" "$sysroot_dir"
+        ;;
 	*)
 		die "Unsupported command: ${command}"
 	;;

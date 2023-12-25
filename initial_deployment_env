@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -euo pipefail
+
+rootfs_dir="$1"
+boot_dir="$2"
+sysroot_dir="$3"
+
+mkdir -p "$rootfs_dir/etc"
+
+mount -o ro,bind "$rootfs_dir" "$rootfs_dir"
+mount -o ro,bind "$rootfs_dir/usr/etc" "$rootfs_dir/etc"
+
+for path in /run /tmp /var; do
+	mount -t tmpfs tmpfs "${rootfs_dir}${path}"
+done
+
+for path in /dev /proc /sys; do
+	mount --rbind "$path" "${rootfs_dir}/${path}"
+done
+
+mount --rbind "$boot_dir" "${rootfs_dir}/boot"
+mount -o bind "$sysroot_dir" "${rootfs_dir}/sysroot"
+
+echo ok
+chroot "$rootfs_dir" /bin/bash

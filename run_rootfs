@@ -1,0 +1,52 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# shellcheck disable=SC2059 # $1 and $2 can contain the printf modifiers
+out() { printf "$1 $2\n" "${@:3}"; }
+error() { out "==> ERROR:" "$@"; } >&2
+warning() { out "==> WARNING:" "$@"; } >&2
+msg() { out "==>" "$@"; }
+die() { error "$@"; exit 1; }
+
+have_function() {
+	declare -f "$1" >/dev/null
+}
+
+rootfs="$PWD/rootfs"
+script="$(realpath "$1")"
+
+source "$script"
+
+if have_function prepare && true ; then
+	rm -rf "$rootfs"
+	if [ -e "$rootfs" ]; then
+		die "Failed to delete rootfs directory"
+	fi
+
+	msg "Prepare"
+	prepare
+fi
+
+if true ; then
+	msg "Pacstrap"
+	./run \
+		--pacman-cache "$PWD/cache" \
+		pacstrap_rootfs_directory \
+		"${packages[@]}"
+fi
+
+if have_function post_install && true ; then
+	msg "Post-install"
+	podman run \
+		--rm -it \
+		--tmpfs /tmp \
+		--tmpfs /run \
+		-v "$PWD:/tmp/work" \
+		-v "$script:/tmp/script" \
+		-w /tmp/work \
+		--entrypoint /bin/bash \
+		--rootfs "$rootfs" \
+		-c 'set -euo pipefail; source /tmp/script; post_install'
+fi
+
