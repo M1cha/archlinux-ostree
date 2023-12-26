@@ -157,6 +157,7 @@ fi
 podman_build_cache_args=()
 if [ "$podman_build_cache" = false ]; then
 	podman_build_cache_args+=(--no-cache)
+	export BUILDAH_LAYERS=false
 fi
 
 case "$command" in

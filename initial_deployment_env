@@ -19,8 +19,8 @@ for path in /dev /proc /sys; do
 	mount --rbind "$path" "${rootfs_dir}/${path}"
 done
 
-mount --rbind "$boot_dir" "${rootfs_dir}/boot"
-mount -o bind "$sysroot_dir" "${rootfs_dir}/sysroot"
+mount -o rw --rbind "$boot_dir" "${rootfs_dir}/boot"
+mount -o rw,bind "$sysroot_dir" "${rootfs_dir}/sysroot"
 
 echo ok
 chroot "$rootfs_dir" /bin/bash
