@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+cache_dir="$PWD/cache"
+disk_file="$cache_dir/disk.qcow2"
+mirror="https://geo.mirror.pkgbuild.com/iso"
+iso="$cache_dir/arch.iso"
+iso_unverified="$cache_dir/arch-unverified.iso"
+ovmf_vars="$cache_dir/OVMF_VARS.4m.fd"
+ssh_key="$cache_dir/id_rsa"
+cloud_init_iso="$cache_dir/cloud-init.iso"
+
+mkdir -p "$cache_dir"
+
+if [ ! -f "$iso" ]; then
+	if [ ! -f "$iso_unverified" ]; then
+		curl \
+			-Lo "$iso_unverified" \
+			"$mirror/latest/archlinux-x86_64.iso"
+	fi
+	if [ ! -f "$iso_unverified.sig" ]; then
+		curl \
+			-Lo "$iso_unverified.sig" \
+			"$mirror/latest/archlinux-x86_64.iso.sig"
+	fi
+
+	sq --force wkd get pierre@archlinux.org -o "$cache_dir/release-key.pgp"
+	sq verify \
+		--signer-file "$cache_dir/release-key.pgp" \
+		--detached "$iso_unverified.sig" \
+		"$iso_unverified"
+
+	mv "$iso_unverified" "$iso"
+fi
+
+if [ ! -f "$ssh_key" ]; then
+	ssh-keygen -t rsa -N "" -C "test" -f "$ssh_key"
+fi
+
+
+create_cloud_init_iso() {
+	echo ''> "$cache_dir/meta-data"
+
+	cat <<EOF > "$cache_dir/user-data"
+#cloud-config
+users:
+  - name: root
+    ssh_authorized_keys:
+      - $(cat "$ssh_key.pub")
+EOF
+
+	cat <<EOF > "$cache_dir/network-config"
+version: 2
+config: disabled
+EOF
+
+	xorrisofs \
+		-output "$cloud_init_iso" \
+		-volid CIDATA \
+		-joliet \
+		-rational-rock \
+		"$cache_dir/meta-data" \
+		"$cache_dir/user-data" \
+		"$cache_dir/network-config"
+}
+
+cloud_init_args=()
+# create_cloud_init_iso
+# cloud_init_args+=(
+# 	-cdrom "$iso" \
+# 	-drive file="$cloud_init_iso",format=raw \
+# )
+#
+# rm -f "$disk_file"
+# qemu-img create -f qcow2 "$disk_file" 10G
+# cp /usr/share/edk2/x64/OVMF_VARS.4m.fd "$ovmf_vars"
+
+qemu-system-x86_64 \
+	"${cloud_init_args[@]}" \
+	-drive file="$disk_file,format=qcow2" \
+	-enable-kvm \
+	-cpu host \
+	-drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd \
+	-drive if=pflash,format=raw,file=$ovmf_vars \
+	-m 4G \
+	-nic user,hostfwd=tcp::60022-:22

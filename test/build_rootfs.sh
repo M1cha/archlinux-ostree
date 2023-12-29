@@ -11,14 +11,12 @@ packages=(
 
 	btrfs-progs
 	openssh
+	networkmanager
 )
 
 prepare() {
 	install -d "$rootfs/etc"
-	#install -m 0644 mkinitcpio.conf "$rootfs/etc/"
-
-	install -d "$rootfs/root/.ssh"
-	#install -m 0644 "~/.ssh/id_rsa.pub" "$rootfs/root/.ssh/authorized_keys"
+	install -m 0644 mkinitcpio.conf "$rootfs/etc/"
 }
 
 post_install_early() {
@@ -32,6 +30,7 @@ post_install() {
 	sed -i 's/^#\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen
 
 	locale-gen
+	systemctl enable NetworkManager.service
 	systemctl enable sshd.service
 	systemctl enable systemd-timesyncd.service
 }

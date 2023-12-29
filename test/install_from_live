@@ -43,7 +43,7 @@ deploy_cmd() {
 }
 
 prepare
-arch-ostree build_pacstrap_container
+arch-ostree build_builder_container
 
 arch-ostree \
 	--pacman-cache /mnt/setup/pacman_cache \
@@ -79,3 +79,8 @@ deploy_cmd ostree admin deploy \
 	--karg=root=UUID="$rootuuid" \
 	--karg=rw \
 	test
+
+install -d /mnt/ostree/deploy/archlinux/var/roothome/.ssh
+install -m 0644 "/tmp/id_rsa.pub" /mnt/ostree/deploy/archlinux/var/roothome/.ssh/authorized_keys
+
+genfstab -U /mnt >> /mnt/ostree/deploy/archlinux/deploy/*/etc/fstab

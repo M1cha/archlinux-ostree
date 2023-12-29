@@ -1,0 +1,330 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+gitdir="$(dirname "$(readlink -f "$0")")"
+source "$gitdir/lib/common.sh"
+
+builder_tag="archlinux-ostree-builder"
+rootfs_tag="archlinux-ostree"
+ostree_repo="/sysroot/ostree/repo"
+podman_build_cache=false
+
+usage() {
+  cat <<EOF
+usage: ${0##*/} [options] [command] [arg...]
+
+  <bool> is a value of 0, false, no, 1, true or yes.
+
+  Options:
+    --boot-dir <path>              Path to the mounted boot directory.
+    --podman-build-cache <bool>    Enable/Disable podman build cache. Boolean.
+                                   Default: no.
+    --pacman-cache <path>          Path to a persistent pacman package cache.
+                                   Default: undefined, thus the pacman cache
+                                   is disabled.
+    --builder-tag <name>          Name of the tag to use for the pacstrap
+                                   container.
+                                   Default: archlinux-pacstrap.
+    --rootfs-tag <name>            Name of the tag to use for the rootfs
+                                   container.
+                                   Default: archlinux-ostree-base.
+    --rootfs-containerfile <path>  Path to the Containerfile used for building
+                                   the rootfs container.
+    --rootfs-dir <path>            Path to the directory where the rootfs will
+                                   be created in.
+    --ostree-repo <path>           Path to the ostree repository.
+                                   Default: /sysroot/ostree/repo.
+
+    --help                         Print this help message
+
+  Commands:
+    build_pacstrap_container         (Re-)Build pacstrap container that's used
+                                     by the other commands and tag it with
+				     --builder-tag.
+    build_rootfs_container           Build rootfs container from
+                                     --rootfs-containerfile and tag it with
+                                     --rootfs-tag.
+    enter_rootfs_container [arg...]  Enter --rootfs-tag container. All changes
+                                     will be lost.
+    commit_rootfs_container [arg...] Commit --rootfs-tag container to
+                                     --ostree-repo. This tool provides --repo
+                                     and --tree-dir to ostree commit.
+                                     Everything else (like branch name) can and
+                                     has to be provided by you.
+    pacstrap_rootfs_directory [pkg...] Run pacstrap on --rootfs-dir. If the
+                                       directory exists, it will NOT be deleted.
+				       [pkg...] will be passed to packstrap and
+				       must contain the packages that shall be
+				       installed.
+    enter_rootfs_directory [arg...]  Enter --rootfs-dir. All changes will be
+                                     lost.
+    commit_rootfs_directory [arg...] Commit --rootfs-dir container to
+                                     --ostree-repo. This tool provides --repo
+                                     and --tree-dir to ostree commit.
+                                     Everything else (like branch name) can and
+                                     has to be provided by you.
+
+EOF
+}
+
+pacstrap_rootfs_directory() {
+	podman run \
+		--pids-limit 4096 \
+		--cap-add sys_admin \
+		--cap-add mknod \
+		--security-opt apparmor=unconfined \
+		"${pacman_cache_args[@]}" \
+		-v "$rootfs_dir:/mnt" \
+		--rm -it \
+		"localhost/$builder_tag" \
+		pacstrap -c -G -M /mnt "$@"
+}
+
+deploy_initial() {
+	mkdir -p "$rootfs_dir/etc"
+
+	mount -o ro,bind "$rootfs_dir" "$rootfs_dir"
+	mount -o ro,bind "$rootfs_dir/usr/etc" "$rootfs_dir/etc"
+
+	for path in /run /tmp /var; do
+		mount -t tmpfs tmpfs "${rootfs_dir}${path}"
+	done
+
+	for path in /dev /proc /sys; do
+		mount --rbind "$path" "${rootfs_dir}/${path}"
+	done
+
+	mount -o rw --rbind "$boot_dir" "${rootfs_dir}/boot"
+	mount -o rw,bind "$sysroot_dir" "${rootfs_dir}/sysroot"
+
+	chroot "$rootfs_dir" "${args[@]}"
+}
+
+build_rootfs_directory() {
+	rootfs="$rootfs_dir"
+	build_script="$(realpath "$1")"
+	build_scriptdir=$(dirname "$build_script")
+
+	source "$build_script"
+
+	post_install_args=()
+	if [ ! -z "${aur_packages+x}" ]; then
+		msg "Build AUR packages"
+
+		mkdir -p "$aur_dir"
+		podman run \
+			"${pacman_cache_args[@]}" \
+			--rm -it \
+			-v "$aur_dir:/tmp/aur" \
+			-v "$gitdir:/tmp/work" \
+			-w /tmp/work \
+			archlinux-pacstrap \
+			/tmp/work/lib/build_aur_packages \
+			"${aur_packages[@]}"
+
+		post_install_args+=(-v "$aur_dir:/tmp/aur")
+	fi
+
+	rm -rf "$rootfs"
+	if [ -e "$rootfs" ]; then
+		die "Failed to delete rootfs directory"
+	fi
+
+	if have_function prepare; then
+		msg "Prepare"
+		pushd "$build_scriptdir"
+		prepare
+		popd
+	fi
+
+	msg "Pacstrap"
+	pacstrap_rootfs_directory "${packages[@]}"
+
+	msg "Post-install"
+	podman run \
+		"${post_install_args[@]}" \
+		--rm -it \
+		--tmpfs /tmp \
+		--tmpfs /run \
+		-v "$build_scriptdir:/tmp/work" \
+		-v "$build_script:/tmp/script" \
+		-v "$gitdir/lib/build_rootfs_post_install:/tmp/entrypoint" \
+		-w /tmp/work \
+		--entrypoint /tmp/entrypoint \
+		--rootfs "$rootfs"
+}
+
+long_opts='aur-dir:,boot-dir:,podman-build-cache:,pacman-cache:,builder-tag:,rootfs-tag:,rootfs-containerfile:,rootfs-dir:,ostree-repo:,sysroot-dir:,help'
+if ! temp=$(getopt -o '' --long "$long_opts" -- "$@"); then
+	die "Invalid arguments"
+fi
+
+eval set -- "$temp"
+while true; do
+	case "$1" in
+		'--aur-dir'|\
+		'--boot-dir'|\
+		'--pacman-cache'|\
+		'--builder-tag'|\
+		'--rootfs-tag'|\
+		'--rootfs-container'|\
+		'--rootfs-dir'|\
+		'--ostree-repo'|\
+		'--sysroot-dir')
+			name="$(arg_to_varname "$1")"
+			printf -v "$name" "%s" "$2"
+			shift 2
+			continue
+		;;
+		'--podman-build-cache')
+			name="$(arg_to_varname "$1")"
+
+			case "$2" in
+				'true'|'1'|'yes')
+					eval "$name=true"
+				;;
+				'false'|'0'|'no')
+					eval "$name=false"
+				;;
+				*)
+					die "Unsupported bool value: $2"
+				;;
+			esac
+
+			shift 2
+			continue
+		;;
+		'--help')
+			usage
+			exit $(( $# ? 0 : 1 ))
+		;;
+		'--')
+			shift
+			break
+		;;
+		*)
+			die "BUG: Unexpected argument: $1"
+		;;
+	esac
+done
+
+if [ -z ${1+x} ]; then
+	die "Missing command argument"
+fi
+command="${1}"
+shift 1
+
+pacman_cache_args=()
+# shellcheck disable=SC2236 # This doesn't work with -n
+if [ ! -z ${pacman_cache+x} ]; then
+	mkdir -p "$pacman_cache"
+	pacman_cache_args=(
+		-v "$(realpath "$pacman_cache"):/var/cache/pacman/pkg"
+	)
+fi
+
+podman_build_cache_args=()
+if [ "$podman_build_cache" = false ]; then
+	podman_build_cache_args+=(--no-cache)
+	export BUILDAH_LAYERS=false
+fi
+
+case "$command" in
+	'prepare_live_env')
+		msg "Install required packages"
+		pacman \
+			--needed \
+			--noconfirm \
+			-S \
+			fuse-overlayfs \
+			git \
+			ostree \
+			podman
+
+		msg "Patch storage.conf"
+		sed -i \
+		    -e 's|^\(graphroot\s*=\s*\).*|\1"/mnt/setup/container-storage"|g' \
+		    /etc/containers/storage.conf
+
+		msg "Patch containers.conf"
+		sed -i \
+		    -e 's|^# \(image_copy_tmp_dir\s*=\s*\).*|\1"/mnt/setup/container-tmp"|g' \
+		    /etc/containers/containers.conf
+
+		mkdir -p "/mnt/setup/container-tmp"
+	;;
+	'build_builder_container')
+		podman build \
+			"${podman_build_cache_args[@]}" \
+			-f "$gitdir/share/Containerfile.builder" \
+			-t "$builder_tag"
+	;;
+
+	'build_rootfs_container')
+		podman build \
+			"${podman_build_cache_args[@]}" \
+			"${pacman_cache_args[@]}" \
+			--cap-add sys_admin \
+			--cap-add mknod \
+			-f "$rootfs_containerfile" \
+			-t "$rootfs_tag"
+	;;
+	'enter_rootfs_container')
+		podman run \
+			--rm -it \
+			"localhost/$rootfs_tag" \
+			"$@"
+	;;
+	'commit_rootfs_container')
+		podman run \
+			--cap-add sys_admin \
+			--security-opt apparmor=unconfined \
+			--mount "type=image,src=localhost/$rootfs_tag,dst=/mnt-lower" \
+			--mount "type=bind,src=$ostree_repo,dst=/sysroot/ostree/repo" \
+			-v "$gitdir:/opt:ro" \
+			--rm -it \
+			"localhost/$builder_tag" \
+			/opt/lib/commit_rootfs "$@"
+	;;
+
+	'pacstrap_rootfs_directory')
+		if [ -d "$rootfs_dir" ]; then
+			warning "rootfs directory exists already."
+		else
+			mkdir -p "$rootfs_dir"
+		fi
+
+		pacstrap_rootfs_directory "$@"
+	;;
+	'build_rootfs_directory')
+		build_rootfs_directory "$@"
+	;;
+	'enter_rootfs_directory')
+		podman run \
+			--rm -it \
+			--rootfs "$rootfs_dir:O" \
+			/bin/bash "$@"
+	;;
+	'commit_rootfs_directory')
+		podman run \
+			--cap-add sys_admin \
+			--security-opt apparmor=unconfined \
+			--mount "type=bind,src=$rootfs_dir,dst=/mnt-lower,ro" \
+			--mount "type=bind,src=$ostree_repo,dst=/sysroot/ostree/repo" \
+			-v "$gitdir:/opt:ro" \
+			--tmpfs /overlay \
+			--rm -it \
+			"localhost/$builder_tag" \
+			/opt/lib/commit_rootfs "$@"
+	;;
+	'deploy_initial')
+		args=("$@")
+		unshare -m bash -c "set -euo pipefail; $(declare_all); deploy_initial"
+	;;
+	*)
+		die "Unsupported command: ${command}"
+	;;
+esac
+
+msg "Successful"
