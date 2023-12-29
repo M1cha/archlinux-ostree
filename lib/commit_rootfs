@@ -4,6 +4,13 @@ set -euo pipefail
 
 rootfs="/mnt"
 
+# shellcheck disable=SC2059 # $1 and $2 can contain the printf modifiers
+out() { printf "$1 $2\n" "${@:3}"; }
+error() { out "====> ERROR:" "$@"; } >&2
+warning() { out "====> WARNING:" "$@"; } >&2
+msg() { out "====>" "$@"; }
+die() { error "$@"; exit 1; }
+
 move_from_var() {
 	# This database must not be deleted, so we can modify it temporarily
 	# after running `ostree admin unlock`.
@@ -35,7 +42,7 @@ move_to_var() {
 	mv "$rootfs/srv" "$rootfs/var/srv"
 	ln -s var/srv "$rootfs/srv"
 
-	cp "/opt/ostree-0-integration.conf" "$rootfs/usr/lib/tmpfiles.d/"
+	cp "/opt/share/ostree-0-integration.conf" "$rootfs/usr/lib/tmpfiles.d/"
 }
 
 clean_rootfs() {
@@ -46,6 +53,40 @@ clean_rootfs() {
 	find "$rootfs" -type s -exec rm {} \;
 }
 
+# ostree expects the initramfs in a different path.
+# Also, we need to prepend microcode updates.
+create_initramfs() {
+	kmod_dirs=()
+	while IFS= read -r -u3 -d $'\0' file; do
+		kmod_dirs+=("$file")
+	done 3< <(find "$rootfs/usr/lib/modules" -mindepth 1 -maxdepth 1 -type d -print0)
+
+	ucode_images=()
+	while IFS= read -r -u3 -d $'\0' file; do
+		ucode_images+=("$file")
+	done 3< <(find "$rootfs/boot" -mindepth 1 -maxdepth 1 -type f -name '*-ucode.img' -print0)
+
+	num_kernels=${#kmod_dirs[@]}
+	if [ $num_kernels -eq 0 ]; then
+		die "No kernel found"
+	fi
+	if [ $num_kernels -ne 1 ]; then
+		die "Multiple kernels found"
+	fi
+
+	if [ ${#ucode_images[@]} -eq 0 ]; then
+		warning "No microcode updates found"
+	fi
+
+	kmod_dir="${kmod_dirs[0]}"
+	kernel_pkg="$(cat "$kmod_dir/pkgbase")"
+
+	cat \
+		"${ucode_images[@]}" \
+		"$rootfs/boot/initramfs-${kernel_pkg}.img" \
+		> "$kmod_dir/initramfs.img"
+}
+
 ostreeify() {
 	# Those are required so the ostree tools can use them.
 	mkdir "$rootfs/sysroot"
@@ -54,13 +95,9 @@ ostreeify() {
 	# etc is handled by ostree and expected to be in /usr.
 	mv "$rootfs/etc" "$rootfs/usr/"
 
-	# ostree expects the initramfs in a different path.
-	# Also, we need to prepend microcode updates.
-	moduledir=$(find "$rootfs/usr/lib/modules" -mindepth 1 -maxdepth 1 -type d)
-	cat \
-		"$rootfs"/boot/*-ucode.img \
-		"$rootfs/boot/initramfs-linux-zen.img" \
-		> "$moduledir/initramfs.img"
+	# This is not needed. We only need the directory as a mountpoint.
+	rm -r "$rootfs/boot"
+	mkdir "$rootfs/boot"
 }
 
 lower_fstype="$(stat -f -c '%T' /mnt-lower)"
@@ -79,6 +116,7 @@ fi
 move_from_var
 move_to_var
 clean_rootfs
+create_initramfs
 ostreeify
 
 ostree commit --repo /sysroot/ostree/repo --tree=dir=/mnt "$@"
