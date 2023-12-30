@@ -36,8 +36,8 @@ mount_partitions() {
 	mkdir -p /mnt/boot
 	mount "$part_boot" /mnt/boot
 
-	mkdir -p /mnt/boot/efi
-	mount "$part_efi" /mnt/boot/efi
+	mkdir -p /mnt/efi
+	mount "$part_efi" /mnt/efi
 }
 
 prepare_live_env() {
@@ -81,7 +81,6 @@ create_deployment_env() {
 deploy_cmd() {
 	arch-ostree \
 		--rootfs-dir /mnt/setup/deployment \
-		--boot-dir /mnt/boot \
 		--sysroot-dir /mnt \
 		deploy_initial -- "$@"
 }
@@ -89,7 +88,7 @@ deploy_cmd() {
 grub_install() {
 	deploy_cmd grub-install \
 		--target x86_64-efi \
-		--efi-directory /boot/efi \
+		--efi-directory /efi \
 		--bootloader-id=GRUB
 
 	ln -sf ../loader/grub.cfg /mnt/boot/grub/grub.cfg

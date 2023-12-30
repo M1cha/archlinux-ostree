@@ -26,6 +26,8 @@ post_install_early() {
 }
 
 post_install() {
+	mkdir /efi
+
 	ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 	sed -i 's/^#\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen
 

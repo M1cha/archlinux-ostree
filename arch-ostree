@@ -17,7 +17,6 @@ usage: ${0##*/} [options] [command] [arg...]
   <bool> is a value of 0, false, no, 1, true or yes.
 
   Options:
-    --boot-dir <path>              Path to the mounted boot directory.
     --podman-build-cache <bool>    Enable/Disable podman build cache. Boolean.
                                    Default: no.
     --pacman-cache <path>          Path to a persistent pacman package cache.
@@ -82,6 +81,19 @@ pacstrap_rootfs_directory() {
 }
 
 deploy_initial() {
+	# We want to mount everything that the user has mounted at
+	# `sysroot_dir`(usually /mnt). This gives us all of the bootloader
+	# partitions.
+	findmnt_output="$(findmnt \
+		--all \
+		--real \
+		--submounts \
+		--mountpoint "$sysroot_dir" \
+		--list \
+		--noheadings \
+		--output TARGET \
+		| tail -n +2)"
+
 	mkdir -p "$rootfs_dir/etc"
 
 	mount -o ro,bind "$rootfs_dir" "$rootfs_dir"
@@ -92,11 +104,15 @@ deploy_initial() {
 	done
 
 	for path in /dev /proc /sys; do
-		mount --rbind "$path" "${rootfs_dir}/${path}"
+		mount --rbind "$path" "${rootfs_dir}${path}"
 	done
 
-	mount -o rw --rbind "$boot_dir" "${rootfs_dir}/boot"
 	mount -o rw,bind "$sysroot_dir" "${rootfs_dir}/sysroot"
+
+	while read -r source; do
+		target="$(realpath --relative-to="$sysroot_dir" "$source")"
+		mount -o rw,bind "$source" "${rootfs_dir}/$target"
+	done <<< "$findmnt_output"
 
 	chroot "$rootfs_dir" "${args[@]}"
 }
@@ -155,7 +171,7 @@ build_rootfs_directory() {
 		--rootfs "$rootfs"
 }
 
-long_opts='aur-dir:,boot-dir:,podman-build-cache:,pacman-cache:,builder-tag:,rootfs-tag:,rootfs-containerfile:,rootfs-dir:,ostree-repo:,sysroot-dir:,help'
+long_opts='aur-dir:,podman-build-cache:,pacman-cache:,builder-tag:,rootfs-tag:,rootfs-containerfile:,rootfs-dir:,ostree-repo:,sysroot-dir:,help'
 if ! temp=$(getopt -o '' --long "$long_opts" -- "$@"); then
 	die "Invalid arguments"
 fi
@@ -164,7 +180,6 @@ eval set -- "$temp"
 while true; do
 	case "$1" in
 		'--aur-dir'|\
-		'--boot-dir'|\
 		'--pacman-cache'|\
 		'--builder-tag'|\
 		'--rootfs-tag'|\
