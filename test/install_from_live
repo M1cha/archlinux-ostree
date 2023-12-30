@@ -8,30 +8,67 @@ disk="/dev/disk/by-id/ata-QEMU_HARDDISK_QM00002"
 part_efi="/dev/disk/by-partlabel/efi"
 part_boot="/dev/disk/by-partlabel/boot"
 part_root="/dev/disk/by-partlabel/root"
+supported_modes=(
+	plain
+	lukspart
+)
 
-cleanup() {
-	umount -R /mnt || true
+# shellcheck disable=SC2059 # $1 and $2 can contain the printf modifiers
+out() { printf "$1 $2\n" "${@:3}"; }
+error() { out "====> ERROR:" "$@"; } >&2
+warning() { out "====> WARNING:" "$@"; } >&2
+msg() { out "====>" "$@"; }
+die() { error "$@"; exit 1; }
+
+have_function() {
+	declare -f "$1" >/dev/null
 }
 
-increase_cowspace() {
+task_cleanup() {
+	umount -R /mnt || true
+	cryptsetup close root || true
+}
+
+task_increase_cowspace() {
 	mount -o remount,size=2G /run/archiso/cowspace
 }
 
-pacman_refresh() {
+task_pacman_refresh() {
 	pacman --noconfirm -Sy
 }
 
-prepare_disk() {
+task_prepare_disk() {
 	sfdisk -w always "$disk" < "/root/arch-ostree/test/layout.sfdisk"
 	sleep 1
 
 	mkfs.vfat -F32 "$part_efi"
 	mkfs.ext4 "$part_boot"
-	mkfs.ext4 "$part_root"
+
+	case "$mode" in
+		plain)
+			mkfs.ext4 "$part_root"
+		;;
+		lukspart)
+			echo -n test | cryptsetup -v luksFormat "$part_root" -
+			echo -n test | cryptsetup open "$part_root" root -d -
+			mkfs.ext4 /dev/mapper/root
+		;;
+	esac
 }
 
-mount_partitions() {
-	mount "$part_root" /mnt
+task_mount() {
+	case "$mode" in
+		plain)
+			mount "$part_root" /mnt
+		;;
+		lukspart)
+			if [ ! -e /dev/mapper/root ]; then
+				echo -n test | cryptsetup open "$part_root" root -d -
+			fi
+
+			mount /dev/mapper/root /mnt
+		;;
+	esac
 
 	mkdir -p /mnt/boot
 	mount "$part_boot" /mnt/boot
@@ -40,21 +77,21 @@ mount_partitions() {
 	mount "$part_efi" /mnt/efi
 }
 
-prepare_live_env() {
+task_prepare_live_env() {
 	arch-ostree prepare_live_env
 }
 
-setup_ostree() {
+task_init_ostree() {
 	ostree admin init-fs --sysroot /mnt --modern /mnt
 	ostree admin stateroot-init --sysroot /mnt archlinux
 	ostree config --repo /mnt/ostree/repo set sysroot.bootprefix 1
 }
 
-build_builder_container() {
+task_build_builder_container() {
 	arch-ostree build_builder_container
 }
 
-build_rootfs() {
+task_build_rootfs() {
 	arch-ostree \
 		--pacman-cache /mnt/setup/pacman_cache \
 		--rootfs-dir /mnt/setup/rootfs \
@@ -62,7 +99,7 @@ build_rootfs() {
 		/root/arch-ostree/test/build_rootfs.sh
 }
 
-commit_rootfs() {
+task_commit_rootfs() {
 	arch-ostree \
 		--rootfs-dir /mnt/setup/rootfs \
 		--ostree-repo /mnt/ostree/repo \
@@ -70,7 +107,7 @@ commit_rootfs() {
 		-- -v -b test
 }
 
-create_deployment_env() {
+task_create_deployment_env() {
 	rm -rf /mnt/setup/deployment
 	ostree checkout \
 		--repo /mnt/ostree/repo \
@@ -85,7 +122,7 @@ deploy_cmd() {
 		deploy_initial -- "$@"
 }
 
-grub_install() {
+task_grub_install() {
 	deploy_cmd grub-install \
 		--target x86_64-efi \
 		--efi-directory /efi \
@@ -94,18 +131,35 @@ grub_install() {
 	ln -sf ../loader/grub.cfg /mnt/boot/grub/grub.cfg
 }
 
-deploy() {
+task_deploy() {
 	rootuuid="$(blkid -o value -s UUID "$part_root")"
+	kargs=()
+
+	case "$mode" in
+		plain)
+			kargs+=(
+				--karg=root=UUID="$rootuuid"
+			)
+		;;
+		lukspart)
+			kargs+=(
+				--karg=rd.luks.name=$rootuuid=root
+				--karg=root=/dev/mapper/root
+			)
+		;;
+	esac
+
+
 	deploy_cmd ostree admin deploy \
 		--os=archlinux \
 		--no-merge \
 		--karg-none \
-		--karg=root=UUID="$rootuuid" \
+		"${kargs[@]}" \
 		--karg=rw \
 		test
 }
 
-install_ssh_key() {
+task_install_ssh_key() {
 	install -d /mnt/ostree/deploy/archlinux/var/roothome/.ssh
 	install \
 		-m 0644 \
@@ -113,28 +167,28 @@ install_ssh_key() {
 		/mnt/ostree/deploy/archlinux/var/roothome/.ssh/authorized_keys
 }
 
-write_fstab() {
+task_write_fstab() {
 	genfstab -U /mnt >> /mnt/ostree/deploy/archlinux/deploy/*/etc/fstab
 }
 
-host_shell() {
+task_host_shell() {
 	bash
 }
 
-deploy_shell() {
+task_deploy_shell() {
 	deploy_cmd "${args[@]}"
 }
 
-poweroff() {
+task_poweroff() {
 	systemctl poweroff
 }
 
-group_prepare_existing() {
-	cleanup
-	increase_cowspace
-	pacman_refresh
-	mount_partitions
-	prepare_live_env
+task_group_prepare_existing() {
+	task_cleanup
+	task_increase_cowspace
+	task_pacman_refresh
+	task_mount
+	task_prepare_live_env
 }
 
 tasks=(
@@ -142,9 +196,9 @@ tasks=(
 	increase_cowspace
 	pacman_refresh
 	prepare_disk
-	mount_partitions
+	mount
 	prepare_live_env
-	setup_ostree
+	init_ostree
 	build_builder_container
 	build_rootfs
 	commit_rootfs
@@ -154,6 +208,9 @@ tasks=(
 	install_ssh_key
 	write_fstab
 )
+
+mode="$1"
+shift
 
 if [ $# -ne 0 ]; then
 	tasks=()
@@ -173,5 +230,15 @@ fi
 args=("$@")
 
 for task in "${tasks[@]}"; do
-	"$task"
+	if ! have_function "task_$task"; then
+		die "Unsupported task: $task"
+	fi
+done
+
+if [[ ! "${supported_modes[@]}" =~ "$mode" ]]; then
+	die "Unsupported mode: $mode"
+fi
+
+for task in "${tasks[@]}"; do
+	"task_$task"
 done
