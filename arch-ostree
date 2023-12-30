@@ -171,8 +171,19 @@ build_rootfs_directory() {
 		--rootfs "$rootfs"
 }
 
-long_opts='aur-dir:,podman-build-cache:,pacman-cache:,builder-tag:,rootfs-tag:,rootfs-containerfile:,rootfs-dir:,ostree-repo:,sysroot-dir:,help'
-if ! temp=$(getopt -o '' --long "$long_opts" -- "$@"); then
+long_opts=(
+	aur-dir:
+	builder-tag:
+	help
+	ostree-repo:
+	podman-build-cache:
+	pacman-cache:
+	rootfs-containerfile:
+	rootfs-dir:
+	rootfs-tag:
+	sysroot-dir:
+)
+if ! temp=$(getopt -o '' --long "$(join_by , "${long_opts[@]}")" -- "$@"); then
 	die "Invalid arguments"
 fi
 
@@ -180,12 +191,12 @@ eval set -- "$temp"
 while true; do
 	case "$1" in
 		'--aur-dir'|\
-		'--pacman-cache'|\
 		'--builder-tag'|\
-		'--rootfs-tag'|\
+		'--ostree-repo'|\
+		'--pacman-cache'|\
 		'--rootfs-container'|\
 		'--rootfs-dir'|\
-		'--ostree-repo'|\
+		'--rootfs-tag'|\
 		'--sysroot-dir')
 			name="$(arg_to_varname "$1")"
 			printf -v "$name" "%s" "$2"

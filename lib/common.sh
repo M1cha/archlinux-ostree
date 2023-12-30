@@ -31,3 +31,9 @@ declare_all() {
   # Then declare functions
   declare -pf
 }
+
+join_by() {
+	local IFS="$1"
+	shift
+	echo "$*"
+}
