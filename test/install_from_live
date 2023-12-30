@@ -9,29 +9,73 @@ part_efi="/dev/disk/by-partlabel/efi"
 part_boot="/dev/disk/by-partlabel/boot"
 part_root="/dev/disk/by-partlabel/root"
 
-prepare() {
+cleanup() {
 	umount -R /mnt || true
+}
 
+increase_cowspace() {
+	mount -o remount,size=2G /run/archiso/cowspace
+}
+
+pacman_refresh() {
+	pacman --noconfirm -Sy
+}
+
+prepare_disk() {
 	sfdisk -w always "$disk" < "/root/arch-ostree/test/layout.sfdisk"
 	sleep 1
 
 	mkfs.vfat -F32 "$part_efi"
 	mkfs.ext4 "$part_boot"
 	mkfs.ext4 "$part_root"
+}
 
+mount_partitions() {
 	mount "$part_root" /mnt
 
-	mkdir /mnt/boot
+	mkdir -p /mnt/boot
 	mount "$part_boot" /mnt/boot
 
-	mkdir /mnt/boot/efi
+	mkdir -p /mnt/boot/efi
 	mount "$part_efi" /mnt/boot/efi
+}
 
+prepare_live_env() {
 	arch-ostree prepare_live_env
+}
 
+setup_ostree() {
 	ostree admin init-fs --sysroot /mnt --modern /mnt
 	ostree admin stateroot-init --sysroot /mnt archlinux
 	ostree config --repo /mnt/ostree/repo set sysroot.bootprefix 1
+}
+
+build_builder_container() {
+	arch-ostree build_builder_container
+}
+
+build_rootfs() {
+	arch-ostree \
+		--pacman-cache /mnt/setup/pacman_cache \
+		--rootfs-dir /mnt/setup/rootfs \
+		build_rootfs_directory \
+		/root/arch-ostree/test/build_rootfs.sh
+}
+
+commit_rootfs() {
+	arch-ostree \
+		--rootfs-dir /mnt/setup/rootfs \
+		--ostree-repo /mnt/ostree/repo \
+		commit_rootfs_directory \
+		-- -v -b test
+}
+
+create_deployment_env() {
+	rm -rf /mnt/setup/deployment
+	ostree checkout \
+		--repo /mnt/ostree/repo \
+		--require-hardlinks \
+		test /mnt/setup/deployment
 }
 
 deploy_cmd() {
@@ -42,45 +86,93 @@ deploy_cmd() {
 		deploy_initial -- "$@"
 }
 
-prepare
-arch-ostree build_builder_container
+grub_install() {
+	deploy_cmd grub-install \
+		--target x86_64-efi \
+		--efi-directory /boot/efi \
+		--bootloader-id=GRUB
 
-arch-ostree \
-	--pacman-cache /mnt/setup/pacman_cache \
-	--rootfs-dir /mnt/setup/rootfs \
-	build_rootfs_directory \
-	/root/arch-ostree/test/build_rootfs.sh
+	ln -sf ../loader/grub.cfg /mnt/boot/grub/grub.cfg
+}
 
-arch-ostree \
- 	--rootfs-dir /mnt/setup/rootfs \
-	--ostree-repo /mnt/ostree/repo \
-	commit_rootfs_directory \
-	-- -v -b test
+deploy() {
+	rootuuid="$(blkid -o value -s UUID "$part_root")"
+	deploy_cmd ostree admin deploy \
+		--os=archlinux \
+		--no-merge \
+		--karg-none \
+		--karg=root=UUID="$rootuuid" \
+		--karg=rw \
+		test
+}
 
-rm -rf /mnt/setup/deployment
-ostree checkout \
-	--repo /mnt/ostree/repo \
-	--require-hardlinks \
-	test /mnt/setup/deployment
+install_ssh_key() {
+	install -d /mnt/ostree/deploy/archlinux/var/roothome/.ssh
+	install \
+		-m 0644 \
+		"/tmp/id_rsa.pub" \
+		/mnt/ostree/deploy/archlinux/var/roothome/.ssh/authorized_keys
+}
 
-deploy_cmd grub-install \
-	--target x86_64-efi \
-	--efi-directory /boot/efi \
-	--boot-directory /boot/efi/EFI \
-	--bootloader-id=GRUB \
-	--removable
+write_fstab() {
+	genfstab -U /mnt >> /mnt/ostree/deploy/archlinux/deploy/*/etc/fstab
+}
 
-touch /mnt/boot/efi/EFI/grub/grub.cfg
-rootuuid="$(blkid -o value -s UUID "$part_root")"
-deploy_cmd ostree admin deploy \
-	--os=archlinux \
-	--no-merge \
-	--karg-none \
-	--karg=root=UUID="$rootuuid" \
-	--karg=rw \
-	test
+host_shell() {
+	bash
+}
 
-install -d /mnt/ostree/deploy/archlinux/var/roothome/.ssh
-install -m 0644 "/tmp/id_rsa.pub" /mnt/ostree/deploy/archlinux/var/roothome/.ssh/authorized_keys
+deploy_shell() {
+	deploy_cmd "${args[@]}"
+}
 
-genfstab -U /mnt >> /mnt/ostree/deploy/archlinux/deploy/*/etc/fstab
+poweroff() {
+	systemctl poweroff
+}
+
+group_prepare_existing() {
+	cleanup
+	increase_cowspace
+	pacman_refresh
+	mount_partitions
+	prepare_live_env
+}
+
+tasks=(
+	cleanup
+	increase_cowspace
+	pacman_refresh
+	prepare_disk
+	mount_partitions
+	prepare_live_env
+	setup_ostree
+	build_builder_container
+	build_rootfs
+	commit_rootfs
+	create_deployment_env
+	grub_install
+	deploy
+	install_ssh_key
+	write_fstab
+)
+
+if [ $# -ne 0 ]; then
+	tasks=()
+
+	for arg in "$@"; do
+		shift
+
+		if [ "$arg" = "--" ]; then
+			break
+		fi
+
+		tasks+=("$arg")
+	done
+
+fi
+
+args=("$@")
+
+for task in "${tasks[@]}"; do
+	"$task"
+done

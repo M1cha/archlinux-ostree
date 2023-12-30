@@ -39,7 +39,7 @@ usage: ${0##*/} [options] [command] [arg...]
     --help                         Print this help message
 
   Commands:
-    build_pacstrap_container         (Re-)Build pacstrap container that's used
+    build_builder_container         (Re-)Build pacstrap container that's used
                                      by the other commands and tag it with
 				     --builder-tag.
     build_rootfs_container           Build rootfs container from

@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-cache_dir="$PWD/cache"
+test_dir="$(dirname "$(readlink -f "$0")")"
+cache_dir="$test_dir/cache"
 disk_file="$cache_dir/disk.qcow2"
 mirror="https://geo.mirror.pkgbuild.com/iso"
 iso="$cache_dir/arch.iso"
@@ -10,6 +11,11 @@ iso_unverified="$cache_dir/arch-unverified.iso"
 ovmf_vars="$cache_dir/OVMF_VARS.4m.fd"
 ssh_key="$cache_dir/id_rsa"
 cloud_init_iso="$cache_dir/cloud-init.iso"
+if [ "$1" == "1" ]; then
+	with_cdrom=true
+else
+	with_cdrom=false
+fi
 
 mkdir -p "$cache_dir"
 
@@ -65,16 +71,22 @@ EOF
 		"$cache_dir/network-config"
 }
 
+if [ ! -f "$ovmf_vars" ]; then
+	cp /usr/share/edk2/x64/OVMF_VARS.4m.fd "$ovmf_vars"
+fi
+
+if [ ! -f "$disk_file" ]; then
+	qemu-img create -f qcow2 "$disk_file" 10G
+fi
+
 cloud_init_args=()
-# create_cloud_init_iso
-# cloud_init_args+=(
-# 	-cdrom "$iso" \
-# 	-drive file="$cloud_init_iso",format=raw \
-# )
-#
-# rm -f "$disk_file"
-# qemu-img create -f qcow2 "$disk_file" 10G
-# cp /usr/share/edk2/x64/OVMF_VARS.4m.fd "$ovmf_vars"
+if [ $with_cdrom = true ]; then
+	create_cloud_init_iso
+	cloud_init_args+=(
+		-cdrom "$iso"
+		-drive file="$cloud_init_iso",format=raw
+	)
+fi
 
 qemu-system-x86_64 \
 	"${cloud_init_args[@]}" \

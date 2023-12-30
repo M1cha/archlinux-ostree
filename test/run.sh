@@ -3,9 +3,10 @@
 set -xeuo pipefail
 
 gitdir="$(git rev-parse --show-toplevel)"
+test_dir="$gitdir/test"
+cache_dir="$test_dir/cache"
 userhost="root@127.0.0.1"
 port="60022"
-cache_dir="$PWD/cache"
 ssh_key="$cache_dir/id_rsa"
 ssh_opts=(
 	-i "$ssh_key"
@@ -16,6 +17,7 @@ ssh_opts=(
 exec_ssh() {
 	ssh \
 		"${ssh_opts[@]}" \
+		-t \
 		-p "$port" \
 		"$userhost" \
 		"$@"
@@ -32,9 +34,6 @@ cp_ssh() {
 		"${from[@]}" \
 		"$userhost:$to"
 }
-
-exec_ssh mount -o remount,size=2G /run/archiso/cowspace
-exec_ssh pacman --noconfirm -Sy
 
 exec_ssh rm -rf /root/arch-ostree
 exec_ssh mkdir /root/arch-ostree
@@ -54,4 +53,5 @@ cp_ssh \
 
 cp_ssh "${ssh_key}.pub" /tmp/
 
-exec_ssh /root/arch-ostree/test/install_from_live
+exec_ssh /root/arch-ostree/test/install_from_live "$@"
+echo Successful
