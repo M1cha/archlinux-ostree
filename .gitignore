@@ -1,1 +1,4 @@
-/out
+/cache*
+/rootfs
+/deployment
+/test/cache*

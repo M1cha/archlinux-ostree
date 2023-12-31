@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+rootfs="/mnt"
+
+# shellcheck source=SCRIPTDIR/common.sh
+source /opt/lib/common.sh
+
+move_from_var() {
+	# This database must not be deleted, so we can modify it temporarily
+	# after running `ostree admin unlock`.
+	sed -i \
+		-e 's|^#\(DBPath\s*=\s*\).*|\1/usr/lib/pacman|g' \
+		-e 's|^#\(IgnoreGroup\s*=\s*\).*|\1modified|g' \
+		"$rootfs/etc/pacman.conf"
+	mv "$rootfs/var/lib/pacman" "$rootfs/usr/lib/"
+}
+
+move_to_var() {
+	mv "$rootfs/home" "$rootfs/var/"
+	ln -s var/home "$rootfs/home"
+
+	mv "$rootfs/mnt" "$rootfs/var/"
+	ln -s var/mnt "$rootfs/mnt"
+
+	# This is recommended by ostree but I don't see a good reason for it.
+	# rmdir "$rootfs/var/opt"
+	# mv "$rootfs/opt" "$rootfs/var/"
+	# ln -s var/opt "$rootfs/opt"
+
+	mv "$rootfs/root" "$rootfs/var/roothome"
+	ln -s var/roothome "$rootfs/root"
+
+	rm -r "${rootfs:?}/usr/local"
+	ln -s ../var/usrlocal "$rootfs/usr/local"
+
+	mv "$rootfs/srv" "$rootfs/var/srv"
+	ln -s var/srv "$rootfs/srv"
+
+	cp "/opt/share/ostree-0-integration.conf" "$rootfs/usr/lib/tmpfiles.d/"
+}
+
+clean_rootfs() {
+	# They'll be unused.
+	rm -r "${rootfs:?}/var/"*
+
+	# pacman leaves behind sockets which are not supported by ostree.
+	find "$rootfs" -type s -exec rm {} \;
+}
+
+# ostree expects the initramfs in a different path.
+# Also, we need to prepend microcode updates.
+create_initramfs() {
+	kmod_dirs=()
+	while IFS= read -r -u3 -d $'\0' file; do
+		kmod_dirs+=("$file")
+	done 3< <(find "$rootfs/usr/lib/modules" -mindepth 1 -maxdepth 1 -type d -print0)
+
+	ucode_images=()
+	while IFS= read -r -u3 -d $'\0' file; do
+		ucode_images+=("$file")
+	done 3< <(find "$rootfs/boot" -mindepth 1 -maxdepth 1 -type f -name '*-ucode.img' -print0)
+
+	num_kernels=${#kmod_dirs[@]}
+	if [ "$num_kernels" -eq 0 ]; then
+		die "No kernel found"
+	fi
+	if [ "$num_kernels" -ne 1 ]; then
+		die "Multiple kernels found"
+	fi
+
+	if [ ${#ucode_images[@]} -eq 0 ]; then
+		warning "No microcode updates found"
+	fi
+
+	kmod_dir="${kmod_dirs[0]}"
+	kernel_pkg="$(cat "$kmod_dir/pkgbase")"
+
+	cat \
+		"${ucode_images[@]}" \
+		"$rootfs/boot/initramfs-${kernel_pkg}.img" \
+		> "$kmod_dir/initramfs.img"
+}
+
+ostreeify() {
+	# Those are required so the ostree tools can use them.
+	mkdir "$rootfs/sysroot"
+	ln -s sysroot/ostree "$rootfs/ostree"
+
+	# etc is handled by ostree and expected to be in /usr.
+	mv "$rootfs/etc" "$rootfs/usr/"
+
+	# This is not needed. We only need the directory as a mountpoint.
+	rm -r "${rootfs:?}/boot"
+	mkdir "$rootfs/boot"
+}
+
+lower_fstype="$(stat -f -c '%T' /mnt-lower)"
+if [ "$lower_fstype" = "overlayfs" ]; then
+	echo "overlay detected, use rsync." >&2
+	rsync -a /mnt-lower/ /mnt
+else
+	# Create a temporary overlay FS so none of our rootfs changes are permanent.
+	mkdir /overlay/{upper,work}
+	mount \
+		-t overlay \
+		-o 'lowerdir=/mnt-lower,upperdir=/overlay/upper,workdir=/overlay/work' \
+		overlay /mnt
+fi
+
+move_from_var
+move_to_var
+clean_rootfs
+create_initramfs
+ostreeify
+
+ostree commit --repo /sysroot/ostree/repo --tree=dir=/mnt "$@"

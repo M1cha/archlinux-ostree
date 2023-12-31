@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+set -xeuo pipefail
+
+git_dir="$(git rev-parse --show-toplevel)"
+test_dir="$git_dir/test"
+cache_dir="$test_dir/cache"
+userhost="root@127.0.0.1"
+port="60022"
+ssh_key="$cache_dir/id_rsa"
+ssh_opts=(
+	-i "$ssh_key"
+	-o StrictHostKeyChecking=no
+	-o UserKnownHostsFile=/dev/null
+)
+
+source "$git_dir/lib/common.sh"
+
+exec_ssh() {
+	ssh \
+		"${ssh_opts[@]}" \
+		-t \
+		-p "$port" \
+		"$userhost" \
+		"$@"
+}
+
+cp_ssh() {
+	from=("${@:1:$#-1}")
+	to="${@:$#}"
+
+	scp \
+		"${ssh_opts[@]}" \
+		-r \
+		-P "$port" \
+		"${from[@]}" \
+		"$userhost:$to"
+}
+
+exec_ssh rm -rf /root/arch-ostree
+exec_ssh mkdir /root/arch-ostree
+cp_ssh \
+	"$git_dir/arch-ostree" \
+	"$git_dir/lib" \
+	"$git_dir/share" \
+	/root/arch-ostree/
+
+exec_ssh mkdir /root/arch-ostree/test
+cp_ssh \
+	"$git_dir/test/build_rootfs.sh" \
+	"$git_dir/test/install_from_live" \
+	"$git_dir/test/layout.sfdisk" \
+	"$git_dir/test/mkinitcpio.conf" \
+	/root/arch-ostree/test/
+
+cp_ssh "${ssh_key}.pub" /tmp/
+
+exec_ssh /root/arch-ostree/test/install_from_live "$@"
+msg "Successful"

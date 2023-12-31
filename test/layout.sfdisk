@@ -1,0 +1,5 @@
+label: gpt
+
+size=1G, type="uefi", name="efi"
+size=1G, type="linux", name="boot"
+size=8G, type="linux", name="root"
