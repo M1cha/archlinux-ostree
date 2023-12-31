@@ -4,6 +4,8 @@ set -xeuo pipefail
 
 export PATH="/root/arch-ostree:$PATH"
 
+source /root/arch-ostree/lib/common.sh
+
 disk="/dev/disk/by-id/ata-QEMU_HARDDISK_QM00002"
 part_efi="/dev/disk/by-partlabel/efi"
 part_boot="/dev/disk/by-partlabel/boot"
@@ -12,17 +14,6 @@ supported_modes=(
 	plain
 	lukspart
 )
-
-# shellcheck disable=SC2059 # $1 and $2 can contain the printf modifiers
-out() { printf "$1 $2\n" "${@:3}"; }
-error() { out "====> ERROR:" "$@"; } >&2
-warning() { out "====> WARNING:" "$@"; } >&2
-msg() { out "====>" "$@"; }
-die() { error "$@"; exit 1; }
-
-have_function() {
-	declare -f "$1" >/dev/null
-}
 
 task_cleanup() {
 	umount -R /mnt || true
@@ -93,6 +84,7 @@ task_build_builder_container() {
 
 task_build_rootfs() {
 	arch-ostree \
+		--aur-dir /mnt/setup/aur \
 		--pacman-cache /mnt/setup/pacman_cache \
 		--rootfs-dir /mnt/setup/rootfs \
 		build_rootfs_directory \
@@ -117,9 +109,9 @@ task_create_deployment_env() {
 
 deploy_cmd() {
 	arch-ostree \
-		--rootfs-dir /mnt/setup/deployment \
+		--deploy-env-dir /mnt/setup/deployment \
 		--sysroot-dir /mnt \
-		deploy_initial -- "$@"
+		deploy_env -- "$@"
 }
 
 task_grub_install() {

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -xeuo pipefail
 
-test_dir="$(dirname "$(readlink -f "$0")")"
+git_dir="$(git rev-parse --show-toplevel)"
+test_dir="$git_dir/test"
 cache_dir="$test_dir/cache"
 disk_file="$cache_dir/disk.qcow2"
 mirror="https://geo.mirror.pkgbuild.com/iso"

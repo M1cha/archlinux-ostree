@@ -13,6 +13,9 @@ packages=(
 	openssh
 	networkmanager
 )
+aur_packages=(
+	yay-bin
+)
 
 prepare() {
 	install -d "$rootfs/etc"

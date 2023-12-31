@@ -4,12 +4,7 @@ set -euo pipefail
 
 rootfs="/mnt"
 
-# shellcheck disable=SC2059 # $1 and $2 can contain the printf modifiers
-out() { printf "$1 $2\n" "${@:3}"; }
-error() { out "====> ERROR:" "$@"; } >&2
-warning() { out "====> WARNING:" "$@"; } >&2
-msg() { out "====>" "$@"; }
-die() { error "$@"; exit 1; }
+source /opt/lib/common.sh
 
 move_from_var() {
 	# This database must not be deleted, so we can modify it temporarily
