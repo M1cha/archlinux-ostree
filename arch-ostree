@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2154
 
-set -xeuo pipefail
+set -euo pipefail
 
 scriptdir="$(dirname "$(readlink -f "$0")")"
 lib_dir="$scriptdir/lib"
@@ -287,17 +287,23 @@ fi
 eval set -- "$temp"
 while true; do
 	case "$1" in
-		'--aur-dir'|\
 		'--builder-tag'|\
+		'--rootfs-tag')
+			name="$(arg_to_varname "$1")"
+			printf -v "$name" "%s" "$2"
+			shift 2
+			continue
+		;;
+		'--aur-dir'|\
 		'--deploy-env-dir'|\
 		'--ostree-repo'|\
 		'--pacman-cache'|\
 		'--rootfs-containerfile'|\
 		'--rootfs-dir'|\
-		'--rootfs-tag'|\
 		'--sysroot-dir')
 			name="$(arg_to_varname "$1")"
-			printf -v "$name" "%s" "$2"
+			value="$(realpath "$2")"
+			printf -v "$name" "%s" "$value"
 			shift 2
 			continue
 		;;
@@ -344,7 +350,7 @@ pacman_cache_args=()
 if [ ! -z ${pacman_cache+x} ]; then
 	mkdir -p "$pacman_cache"
 	pacman_cache_args=(
-		-v "$(realpath "$pacman_cache"):/var/cache/pacman/pkg"
+		-v "$pacman_cache:/var/cache/pacman/pkg"
 	)
 fi
 
@@ -386,7 +392,7 @@ case "$command" in
 			--security-opt apparmor=unconfined \
 			--mount "type=image,src=localhost/$rootfs_tag,dst=/mnt-lower" \
 			--mount "type=bind,src=$ostree_repo,dst=/sysroot/ostree/repo" \
-			-v "$lib_dir:/opt/share:ro" \
+			-v "$lib_dir:/opt/lib:ro" \
 			-v "$share_dir:/opt/share:ro" \
 			--rm -it \
 			"localhost/$builder_tag" \

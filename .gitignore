@@ -1,4 +1,4 @@
-/cache
+/cache*
 /rootfs
 /deployment
-/test/cache
+/test/cache*
