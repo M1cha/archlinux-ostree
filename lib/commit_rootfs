@@ -4,6 +4,7 @@ set -euo pipefail
 
 rootfs="/mnt"
 
+# shellcheck source=SCRIPTDIR/common.sh
 source /opt/lib/common.sh
 
 move_from_var() {
@@ -62,10 +63,10 @@ create_initramfs() {
 	done 3< <(find "$rootfs/boot" -mindepth 1 -maxdepth 1 -type f -name '*-ucode.img' -print0)
 
 	num_kernels=${#kmod_dirs[@]}
-	if [ $num_kernels -eq 0 ]; then
+	if [ "$num_kernels" -eq 0 ]; then
 		die "No kernel found"
 	fi
-	if [ $num_kernels -ne 1 ]; then
+	if [ "$num_kernels" -ne 1 ]; then
 		die "Multiple kernels found"
 	fi
 
@@ -91,7 +92,7 @@ ostreeify() {
 	mv "$rootfs/etc" "$rootfs/usr/"
 
 	# This is not needed. We only need the directory as a mountpoint.
-	rm -r "$rootfs/boot"
+	rm -r "${rootfs:?}/boot"
 	mkdir "$rootfs/boot"
 }
 

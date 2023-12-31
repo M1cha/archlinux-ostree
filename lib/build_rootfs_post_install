@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
+# shellcheck source=SCRIPTDIR/common.sh
 source /tmp/common.sh
+# shellcheck disable=SC1091
 source /tmp/script
 
 if have_function post_install_early; then

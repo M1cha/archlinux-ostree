@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2154
 
 set -xeuo pipefail
 
 scriptdir="$(dirname "$(readlink -f "$0")")"
 lib_dir="$scriptdir/lib"
 share_dir="$scriptdir/share"
+
+# shellcheck source=lib/common.sh
 source "$lib_dir/common.sh"
 
 builder_tag="archlinux-ostree-builder"
@@ -213,9 +216,11 @@ build_rootfs_directory() {
 	build_script="$(realpath "$1")"
 	build_scriptdir=$(dirname "$build_script")
 
+	# shellcheck disable=SC1090
 	source "$build_script"
 
 	post_install_args=()
+	# shellcheck disable=SC2236 # This doesn't work with -n
 	if [ ! -z "${aur_packages+x}" ]; then
 		msg "Build AUR packages"
 

@@ -12,7 +12,7 @@ build_aur_package() {
 
 	pushd "$dir"
 	sudo -u builder makepkg -s --noconfirm
-	cp *.pkg.tar.zst /tmp/aur/
+	cp ./*.pkg.tar.zst /tmp/aur/
 	popd
 
 	rm -rf "$dir"
