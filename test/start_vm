@@ -3,6 +3,8 @@
 set -xeuo pipefail
 
 git_dir="$(git rev-parse --show-toplevel)"
+source "$git_dir/lib/common.sh"
+
 test_dir="$git_dir/test"
 cache_dir="$test_dir/cache"
 disk_file="$cache_dir/disk.qcow2"
@@ -12,39 +14,35 @@ iso_unverified="$cache_dir/arch-unverified.iso"
 ovmf_vars="$cache_dir/OVMF_VARS.4m.fd"
 ssh_key="$cache_dir/id_rsa"
 cloud_init_iso="$cache_dir/cloud-init.iso"
-if [ "$1" == "1" ]; then
-	with_cdrom=true
-else
-	with_cdrom=false
-fi
+with_cdrom=true
+with_uefi=true
+long_opts=(
+	with-cdrom:
+	with-uefi:
+)
 
-mkdir -p "$cache_dir"
+download_arch_iso() {
+	if [ ! -f "$iso" ]; then
+		if [ ! -f "$iso_unverified" ]; then
+			curl \
+				-Lo "$iso_unverified" \
+				"$mirror/latest/archlinux-x86_64.iso"
+		fi
+		if [ ! -f "$iso_unverified.sig" ]; then
+			curl \
+				-Lo "$iso_unverified.sig" \
+				"$mirror/latest/archlinux-x86_64.iso.sig"
+		fi
 
-if [ ! -f "$iso" ]; then
-	if [ ! -f "$iso_unverified" ]; then
-		curl \
-			-Lo "$iso_unverified" \
-			"$mirror/latest/archlinux-x86_64.iso"
+		sq --force wkd get pierre@archlinux.org -o "$cache_dir/release-key.pgp"
+		sq verify \
+			--signer-file "$cache_dir/release-key.pgp" \
+			--detached "$iso_unverified.sig" \
+			"$iso_unverified"
+
+		mv "$iso_unverified" "$iso"
 	fi
-	if [ ! -f "$iso_unverified.sig" ]; then
-		curl \
-			-Lo "$iso_unverified.sig" \
-			"$mirror/latest/archlinux-x86_64.iso.sig"
-	fi
-
-	sq --force wkd get pierre@archlinux.org -o "$cache_dir/release-key.pgp"
-	sq verify \
-		--signer-file "$cache_dir/release-key.pgp" \
-		--detached "$iso_unverified.sig" \
-		"$iso_unverified"
-
-	mv "$iso_unverified" "$iso"
-fi
-
-if [ ! -f "$ssh_key" ]; then
-	ssh-keygen -t rsa -N "" -C "test" -f "$ssh_key"
-fi
-
+}
 
 create_cloud_init_iso() {
 	echo ''> "$cache_dir/meta-data"
@@ -72,9 +70,48 @@ EOF
 		"$cache_dir/network-config"
 }
 
-if [ ! -f "$ovmf_vars" ]; then
-	cp /usr/share/edk2/x64/OVMF_VARS.4m.fd "$ovmf_vars"
+if ! temp=$(getopt -o '' --long "$(join_by , "${long_opts[@]}")" -- "$@"); then
+	die "Invalid arguments"
 fi
+
+eval set -- "$temp"
+while true; do
+	case "$1" in
+		'--with-cdrom'|\
+		'--with-uefi')
+			name="$(arg_to_varname "$1")"
+
+			case "$2" in
+				'true'|'1'|'yes')
+					eval "$name=true"
+				;;
+				'false'|'0'|'no')
+					eval "$name=false"
+				;;
+				*)
+					die "Unsupported bool value: $2"
+				;;
+			esac
+
+			shift 2
+			continue
+		;;
+		'--')
+			shift
+			break
+		;;
+		*)
+			die "BUG: Unexpected argument: $1"
+		;;
+	esac
+done
+
+mkdir -p "$cache_dir"
+
+if [ ! -f "$ssh_key" ]; then
+	ssh-keygen -t rsa -N "" -C "test" -f "$ssh_key"
+fi
+
 
 if [ ! -f "$disk_file" ]; then
 	qemu-img create -f qcow2 "$disk_file" 10G
@@ -82,10 +119,23 @@ fi
 
 cloud_init_args=()
 if [ $with_cdrom = true ]; then
+	download_arch_iso
 	create_cloud_init_iso
 	cloud_init_args+=(
 		-cdrom "$iso"
-		-drive file="$cloud_init_iso",format=raw
+		-drive file="$cloud_init_iso,format=raw"
+	)
+fi
+
+extra_args=()
+if [ $with_uefi = true ]; then
+	if [ ! -f "$ovmf_vars" ]; then
+		cp /usr/share/edk2/x64/OVMF_VARS.4m.fd "$ovmf_vars"
+	fi
+
+	extra_args+=(
+		-drive "if=pflash,format=raw,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd"
+		-drive "if=pflash,format=raw,file=$ovmf_vars"
 	)
 fi
 
@@ -94,7 +144,6 @@ qemu-system-x86_64 \
 	-drive file="$disk_file,format=qcow2" \
 	-enable-kvm \
 	-cpu host \
-	-drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd \
-	-drive if=pflash,format=raw,file=$ovmf_vars \
 	-m 4G \
+	"${extra_args[@]}" \
 	-nic user,hostfwd=tcp::60022-:22

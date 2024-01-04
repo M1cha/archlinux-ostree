@@ -1,0 +1,4 @@
+label: dos
+
+size=1G, type="linux", name="boot"
+size=8G, type="linux", name="root"

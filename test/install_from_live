@@ -4,15 +4,43 @@ set -xeuo pipefail
 
 export PATH="/root/arch-ostree:$PATH"
 
+# shellcheck source=/lib/common.sh
 source /root/arch-ostree/lib/common.sh
 
 disk="/dev/disk/by-id/ata-QEMU_HARDDISK_QM00002"
-part_efi="/dev/disk/by-partlabel/efi"
-part_boot="/dev/disk/by-partlabel/boot"
-part_root="/dev/disk/by-partlabel/root"
-supported_modes=(
+supported_part_schemes=(
 	plain
 	lukspart
+)
+supported_boot_modes=(
+	bios
+	uefi
+)
+long_opts=(
+	part-scheme:
+)
+part_scheme=plain
+if [ -f /sys/firmware/efi/fw_platform_size ]; then
+	boot_mode=uefi
+else
+	boot_mode=bios
+fi
+tasks=(
+	cleanup
+	increase_cowspace
+	pacman_refresh
+	prepare_disk
+	mount
+	prepare_live_env
+	init_ostree
+	build_builder_container
+	build_rootfs
+	commit_rootfs
+	create_deployment_env
+	grub_install
+	deploy
+	install_ssh_key
+	write_fstab
 )
 
 task_cleanup() {
@@ -29,13 +57,15 @@ task_pacman_refresh() {
 }
 
 task_prepare_disk() {
-	sfdisk -w always "$disk" < "/root/arch-ostree/test/layout.sfdisk"
+	sfdisk -w always "$disk" < "/root/arch-ostree/test/layout-$boot_mode.sfdisk"
 	sleep 1
 
-	mkfs.vfat -F32 "$part_efi"
+	if [ "$boot_mode" = "uefi" ]; then
+		mkfs.vfat -F32 "$part_efi"
+	fi
 	mkfs.ext4 "$part_boot"
 
-	case "$mode" in
+	case "$part_scheme" in
 		plain)
 			mkfs.ext4 "$part_root"
 		;;
@@ -48,7 +78,7 @@ task_prepare_disk() {
 }
 
 task_mount() {
-	case "$mode" in
+	case "$part_scheme" in
 		plain)
 			mount "$part_root" /mnt
 		;;
@@ -64,8 +94,10 @@ task_mount() {
 	mkdir -p /mnt/boot
 	mount "$part_boot" /mnt/boot
 
-	mkdir -p /mnt/efi
-	mount "$part_efi" /mnt/efi
+	if [ "$boot_mode" = "uefi" ]; then
+		mkdir -p /mnt/efi
+		mount "$part_efi" /mnt/efi
+	fi
 }
 
 task_prepare_live_env() {
@@ -115,10 +147,17 @@ deploy_cmd() {
 }
 
 task_grub_install() {
-	deploy_cmd grub-install \
-		--target x86_64-efi \
-		--efi-directory /efi \
-		--bootloader-id=GRUB
+	case "$boot_mode" in
+		bios)
+			deploy_cmd grub-install --target i386-pc "$disk"
+		;;
+		uefi)
+			deploy_cmd grub-install \
+				--target x86_64-efi \
+				--efi-directory /efi \
+				--bootloader-id=GRUB
+		;;
+	esac
 
 	ln -sf ../loader/grub.cfg /mnt/boot/grub/grub.cfg
 }
@@ -127,7 +166,7 @@ task_deploy() {
 	rootuuid="$(blkid -o value -s UUID "$part_root")"
 	kargs=()
 
-	case "$mode" in
+	case "$part_scheme" in
 		plain)
 			kargs+=(
 				--karg=root=UUID="$rootuuid"
@@ -135,12 +174,11 @@ task_deploy() {
 		;;
 		lukspart)
 			kargs+=(
-				--karg=rd.luks.name=$rootuuid=root
+				--karg="rd.luks.name=$rootuuid=root"
 				--karg=root=/dev/mapper/root
 			)
 		;;
 	esac
-
 
 	deploy_cmd ostree admin deploy \
 		--os=archlinux \
@@ -183,26 +221,28 @@ task_group_prepare_existing() {
 	task_prepare_live_env
 }
 
-tasks=(
-	cleanup
-	increase_cowspace
-	pacman_refresh
-	prepare_disk
-	mount
-	prepare_live_env
-	init_ostree
-	build_builder_container
-	build_rootfs
-	commit_rootfs
-	create_deployment_env
-	grub_install
-	deploy
-	install_ssh_key
-	write_fstab
-)
+if ! temp=$(getopt -o '+' --long "$(join_by , "${long_opts[@]}")" -- "$@"); then
+	die "Invalid arguments"
+fi
 
-mode="$1"
-shift
+eval set -- "$temp"
+while true; do
+	case "$1" in
+		'--part-scheme')
+			name="$(arg_to_varname "$1")"
+			printf -v "$name" "%s" "$2"
+			shift 2
+			continue
+		;;
+		'--')
+			shift
+			break
+		;;
+		*)
+			die "BUG: Unexpected argument: $1"
+		;;
+	esac
+done
 
 if [ $# -ne 0 ]; then
 	tasks=()
@@ -216,7 +256,6 @@ if [ $# -ne 0 ]; then
 
 		tasks+=("$arg")
 	done
-
 fi
 
 args=("$@")
@@ -227,9 +266,25 @@ for task in "${tasks[@]}"; do
 	fi
 done
 
-if [[ ! "${supported_modes[@]}" =~ "$mode" ]]; then
-	die "Unsupported mode: $mode"
+if [[ ! ${supported_part_schemes[*]} =~ $part_scheme ]]; then
+	die "Unsupported partition scheme: $part_scheme"
 fi
+
+if [[ ! ${supported_boot_modes[*]} =~ $boot_mode ]]; then
+	die "Unsupported boot_mode: $boot_mode"
+fi
+
+case "$boot_mode" in
+	bios)
+		part_boot="$disk-part1"
+		part_root="$disk-part2"
+	;;
+	uefi)
+		part_efi="/dev/disk/by-partlabel/efi"
+		part_boot="/dev/disk/by-partlabel/boot"
+		part_root="/dev/disk/by-partlabel/root"
+	;;
+esac
 
 for task in "${tasks[@]}"; do
 	"task_$task"
