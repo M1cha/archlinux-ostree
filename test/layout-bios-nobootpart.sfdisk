@@ -1,0 +1,3 @@
+label: dos
+
+size=9G, type="linux", name="root"

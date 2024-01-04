@@ -18,6 +18,7 @@ supported_boot_modes=(
 )
 long_opts=(
 	part-scheme:
+	with-boot-part:
 )
 part_scheme=plain
 if [ -f /sys/firmware/efi/fw_platform_size ]; then
@@ -25,6 +26,7 @@ if [ -f /sys/firmware/efi/fw_platform_size ]; then
 else
 	boot_mode=bios
 fi
+with_boot_part=true
 tasks=(
 	cleanup
 	increase_cowspace
@@ -57,13 +59,22 @@ task_pacman_refresh() {
 }
 
 task_prepare_disk() {
-	sfdisk -w always "$disk" < "/root/arch-ostree/test/layout-$boot_mode.sfdisk"
+	if [ $with_boot_part = true ]; then
+		bootpart_suffix="-withbootpart"
+	else
+		bootpart_suffix="-nobootpart"
+	fi
+
+	sfdisk -w always "$disk" \
+		< "/root/arch-ostree/test/layout-${boot_mode}${bootpart_suffix}.sfdisk"
 	sleep 1
 
 	if [ "$boot_mode" = "uefi" ]; then
 		mkfs.vfat -F32 "$part_efi"
 	fi
-	mkfs.ext4 "$part_boot"
+	if [ $with_boot_part = true ]; then
+		mkfs.ext4 "$part_boot"
+	fi
 
 	case "$part_scheme" in
 		plain)
@@ -91,8 +102,10 @@ task_mount() {
 		;;
 	esac
 
-	mkdir -p /mnt/boot
-	mount "$part_boot" /mnt/boot
+	if [ $with_boot_part = true ]; then
+		mkdir -p /mnt/boot
+		mount "$part_boot" /mnt/boot
+	fi
 
 	if [ "$boot_mode" = "uefi" ]; then
 		mkdir -p /mnt/efi
@@ -234,6 +247,24 @@ while true; do
 			shift 2
 			continue
 		;;
+		'--with-boot-part')
+			name="$(arg_to_varname "$1")"
+
+			case "$2" in
+				'true'|'1'|'yes')
+					eval "$name=true"
+				;;
+				'false'|'0'|'no')
+					eval "$name=false"
+				;;
+				*)
+					die "Unsupported bool value: $2"
+				;;
+			esac
+
+			shift 2
+			continue
+		;;
 		'--')
 			shift
 			break
@@ -276,12 +307,18 @@ fi
 
 case "$boot_mode" in
 	bios)
-		part_boot="$disk-part1"
-		part_root="$disk-part2"
+		if [ $with_boot_part = true ]; then
+			part_boot="$disk-part1"
+			part_root="$disk-part2"
+		else
+			part_root="$disk-part1"
+		fi
 	;;
 	uefi)
 		part_efi="/dev/disk/by-partlabel/efi"
-		part_boot="/dev/disk/by-partlabel/boot"
+		if [ $with_boot_part = true ]; then
+			part_boot="/dev/disk/by-partlabel/boot"
+		fi
 		part_root="/dev/disk/by-partlabel/root"
 	;;
 esac
