@@ -203,10 +203,25 @@ deploy_env() {
 
 	mount -o rw,bind "$sysroot_dir" "${deploy_env_dir}/sysroot"
 
-	while read -r source; do
-		target="$(realpath --relative-to="$sysroot_dir" "$source")"
-		mount -o bind "$source" "${deploy_env_dir}/$target"
-	done <<< "$findmnt_output"
+	mounted_boot=false
+	if [ -n "$findmnt_output" ]; then
+		while read -r source; do
+			target="$(realpath --relative-to="$sysroot_dir" "$source")"
+			mount -o bind "$source" "${deploy_env_dir}/$target"
+
+			if [ "$target" = "boot" ]; then
+				mounted_boot=true
+			fi
+		done <<< "$findmnt_output"
+	fi
+
+	# In case there is no separate boot partition we need to
+	# bind-mount the boot directory so a `grub-install` within the
+	# deploy env installs to the actual boot directory outside of
+	# the temporary deployment rootfs.
+	if [ -e "$sysroot_dir/boot" ] && [ $mounted_boot = false ]; then
+		mount --mkdir -o bind "$sysroot_dir/boot" "$deploy_env_dir/boot"
+	fi
 
 	chroot "$deploy_env_dir" "${args[@]}"
 }
