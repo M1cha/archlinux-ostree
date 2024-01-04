@@ -28,11 +28,9 @@ download_arch_iso() {
 				-Lo "$iso_unverified" \
 				"$mirror/latest/archlinux-x86_64.iso"
 		fi
-		if [ ! -f "$iso_unverified.sig" ]; then
-			curl \
-				-Lo "$iso_unverified.sig" \
-				"$mirror/latest/archlinux-x86_64.iso.sig"
-		fi
+		curl \
+			-Lo "$iso_unverified.sig" \
+			"$mirror/latest/archlinux-x86_64.iso.sig"
 
 		sq --force wkd get pierre@archlinux.org -o "$cache_dir/release-key.pgp"
 		sq verify \
