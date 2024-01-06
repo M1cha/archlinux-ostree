@@ -197,6 +197,10 @@ deploy_env() {
 		mount -t tmpfs tmpfs "${deploy_env_dir}${path}"
 	done
 
+	for path in home mnt roothome usrlocal srv opt; do
+		mkdir "$deploy_env_dir/var/$path"
+	done
+
 	for path in /dev /proc /sys; do
 		mount --rbind "$path" "${deploy_env_dir}${path}"
 	done
