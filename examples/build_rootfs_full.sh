@@ -1,7 +1,7 @@
 packages=(
 	# The basics as usual.
 	base
-	# We need a kernel, of source.
+	# We need a kernel, of course.
 	linux
 	# Microcode updates for multiple CPUs, so this rootfs can work on all
 	# of them.
