@@ -3,7 +3,7 @@
 A tool for building an archlinux OSTree tree and deploying it.
 
 If you just want to know how to use this, check out the
-[guide on the Arch wiki](https://wiki.archlinux.org/title/Install_Arch_Linux_inside_OSTree).
+[guide on the Arch wiki](https://wiki.archlinux.org/title/User:M1cha/Install_Arch_Linux_inside_OSTree).
 
 ## Thanks
 - [GrabbenD](https://github.com/GrabbenD) for making this work with mainline
