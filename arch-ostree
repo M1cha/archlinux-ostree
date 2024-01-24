@@ -243,7 +243,11 @@ build_rootfs_directory() {
 	if [ ! -z "${aur_packages+x}" ]; then
 		msg "Build AUR packages"
 
-		mkdir -p "$aur_dir"
+		if [ -d "$aur_dir" ]; then
+			rm -r "$aur_dir"
+		fi
+		mkdir "$aur_dir"
+
 		podman run \
 			"${pacman_cache_args[@]}" \
 			--rm -it \
