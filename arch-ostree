@@ -167,6 +167,7 @@ pacstrap_rootfs_directory() {
 		--cap-add sys_admin \
 		--cap-add mknod \
 		--security-opt apparmor=unconfined \
+		--net=host \
 		"${pacman_cache_args[@]}" \
 		-v "$rootfs_dir:/mnt" \
 		--rm -it \
@@ -250,6 +251,7 @@ build_rootfs_directory() {
 
 		podman run \
 			"${pacman_cache_args[@]}" \
+			--net=host \
 			--rm -it \
 			-v "$aur_dir:/tmp/aur" \
 			-v "$lib_dir/build_aur_packages:/tmp/script" \
@@ -278,6 +280,7 @@ build_rootfs_directory() {
 	msg "Post-install"
 	podman run \
 		"${post_install_args[@]}" \
+		--net=host \
 		--rm -it \
 		--tmpfs /tmp \
 		--tmpfs /run \
@@ -389,6 +392,7 @@ case "$command" in
 	;;
 	'build_builder_container')
 		podman build \
+			--net=host \
 			"${podman_build_cache_args[@]}" \
 			-f "$share_dir/Containerfile.builder" \
 			-t "$builder_tag"
@@ -396,6 +400,7 @@ case "$command" in
 
 	'build_rootfs_container')
 		podman build \
+			--net=host \
 			"${podman_build_cache_args[@]}" \
 			"${pacman_cache_args[@]}" \
 			--cap-add sys_admin \
@@ -405,12 +410,14 @@ case "$command" in
 	;;
 	'enter_rootfs_container')
 		podman run \
+			--net=host \
 			--rm -it \
 			"localhost/$rootfs_tag" \
 			"$@"
 	;;
 	'commit_rootfs_container')
 		podman run \
+			--net=host \
 			--cap-add sys_admin \
 			--security-opt apparmor=unconfined \
 			--mount "type=image,src=localhost/$rootfs_tag,dst=/mnt-lower" \
@@ -436,12 +443,14 @@ case "$command" in
 	;;
 	'enter_rootfs_directory')
 		podman run \
+			--net=host \
 			--rm -it \
 			--rootfs "$rootfs_dir:O" \
 			/bin/bash "$@"
 	;;
 	'commit_rootfs_directory')
 		podman run \
+			--net=host \
 			--cap-add sys_admin \
 			--security-opt apparmor=unconfined \
 			--mount "type=bind,src=$rootfs_dir,dst=/mnt-lower,ro" \
