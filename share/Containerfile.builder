@@ -1,6 +1,6 @@
-FROM docker.io/alpine:3.19 AS builder
+FROM docker.io/alpine:3.21 AS builder
 
-RUN apk add --no-cache coreutils sequoia-sq tar wget zstd
+RUN apk add --no-cache coreutils gnupg tar wget zstd
 
 WORKDIR /tmp
 
@@ -8,12 +8,12 @@ RUN wget http://mirror.cmt.de/archlinux/iso/latest/b2sums.txt
 RUN wget http://mirror.cmt.de/archlinux/iso/latest/sha256sums.txt
 RUN wget http://mirror.cmt.de/archlinux/iso/latest/archlinux-bootstrap-x86_64.tar.zst
 RUN wget http://mirror.cmt.de/archlinux/iso/latest/archlinux-bootstrap-x86_64.tar.zst.sig
-RUN sq --force wkd get pierre@archlinux.org -o release-key.pgp
+RUN gpg --auto-key-locate clear,wkd -v --locate-external-key pierre@archlinux.org
 
 # This might be pedantic given that the signature matches, but why not.
 RUN b2sum --ignore-missing -c b2sums.txt
 RUN sha256sum --ignore-missing -c sha256sums.txt
-RUN sq verify --signer-file release-key.pgp --detached archlinux-bootstrap-x86_64.tar.zst.sig archlinux-bootstrap-x86_64.tar.zst
+RUN gpg --keyserver-options auto-key-retrieve --verify archlinux-bootstrap-x86_64.tar.zst.sig archlinux-bootstrap-x86_64.tar.zst
 
 WORKDIR /
 
